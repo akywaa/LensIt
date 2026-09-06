@@ -1,0 +1,4 @@
+#include "resource.h"
+
+// First ICON resource becomes the EXE icon in Windows
+IDI_APP_ICON    ICON    "app.ico"

@@ -97,6 +97,74 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
         KBDLLHOOKSTRUCT* p = (KBDLLHOOKSTRUCT*)lParam;
         bool isDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
 
+        // Break Timer Input Interceptions
+        if (g_isBreakTimerActive && isDown) {
+            if (g_isBreakTimerEditing) {
+                if (p->vkCode == VK_ESCAPE) {
+                    g_isBreakTimerEditing = false;
+                    g_breakTimerInputStr.clear();
+                    RedrawOverlay();
+                    return 1;
+                }
+                if (p->vkCode == VK_RETURN) {
+                    CommitBreakTimerInput();
+                    return 1;
+                }
+                if (p->vkCode == VK_BACK) {
+                    if (!g_breakTimerInputStr.empty()) {
+                        g_breakTimerInputStr.pop_back();
+                        RedrawOverlay();
+                    }
+                    return 1;
+                }
+
+                wchar_t ch = 0;
+                if (p->vkCode >= '0' && p->vkCode <= '9') {
+                    ch = (wchar_t)p->vkCode;
+                }
+                else if (p->vkCode >= VK_NUMPAD0 && p->vkCode <= VK_NUMPAD9) {
+                    ch = L'0' + (p->vkCode - VK_NUMPAD0);
+                }
+                else if (p->vkCode == VK_OEM_1 || p->vkCode == VK_OEM_PERIOD || p->vkCode == VK_DECIMAL || p->vkCode == VK_OEM_COMMA) {
+                    ch = L':';
+                }
+
+                if (ch != 0 && g_breakTimerInputStr.length() < 6) {
+                    g_breakTimerInputStr.push_back(ch);
+                    RedrawOverlay();
+                    return 1;
+                }
+                return 1; // Block other keys while editing
+            }
+
+            if (p->vkCode == VK_ESCAPE) {
+                StopBreakTimer();
+                ShowNotification(L"Break Timer", L"Timer cancelled", RGB(220, 70, 70));
+                return 1;
+            }
+            if (p->vkCode == VK_SPACE) {
+                g_isBreakTimerPaused = !g_isBreakTimerPaused;
+                RedrawOverlay();
+                return 1;
+            }
+
+            bool shiftPressed = (GetAsyncKeyState(VK_SHIFT) < 0);
+            int step = shiftPressed ? 5 : 60;
+
+            if (p->vkCode == VK_UP || p->vkCode == VK_RIGHT) {
+                g_breakTimerRemainingSec += step;
+                if (g_breakTimerRemainingSec > 5999) g_breakTimerRemainingSec = 5999;
+                g_breakTimerTotalSec = max(g_breakTimerTotalSec, g_breakTimerRemainingSec);
+                RedrawOverlay();
+                return 1;
+            }
+            if (p->vkCode == VK_DOWN || p->vkCode == VK_LEFT) {
+                g_breakTimerRemainingSec = max(5, g_breakTimerRemainingSec - step);
+                RedrawOverlay();
+                return 1;
+            }
+        }
+
         if (g_bindingMode != BindingMode::None && isDown) {
             if (p->vkCode != VK_ESCAPE) {
                 if (g_bindingMode == BindingMode::TriggerKey) {
@@ -121,6 +189,10 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
             }
         }
         else if (g_isTriggerHeld && isDown) {
+            if (p->vkCode == 'T') {
+                ToggleBreakTimer(5);
+                return 1;
+            }
             if (p->vkCode == VK_ESCAPE) {
                 if (g_persistentDrawingsActive) {
                     return 1;
@@ -215,6 +287,46 @@ extern std::shared_ptr<Bitmap> BakeBlurredBitmap(RECT rc);
 LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION) {
         MSLLHOOKSTRUCT* pMouse = (MSLLHOOKSTRUCT*)lParam;
+
+        if (g_isBreakTimerActive) {
+            if (wParam == WM_LBUTTONDOWN) {
+                int vScreenX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+                int vScreenY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+                int w = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+                int h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+                float cx = (float)w / 2.0f;
+                float cy = (float)h / 2.0f;
+
+                int localX = pMouse->pt.x - vScreenX;
+                int localY = pMouse->pt.y - vScreenY;
+
+                // Clicked inside clock hit-box
+                if (localX >= (cx - 220) && localX <= (cx + 220) && localY >= (cy - 90) && localY <= (cy + 50)) {
+                    g_isBreakTimerEditing = true;
+                    g_isBreakTimerPaused = true;
+                    g_breakTimerInputStr.clear();
+                    RedrawOverlay();
+                    return 1;
+                }
+                else if (g_isBreakTimerEditing) {
+                    CommitBreakTimerInput();
+                    return 1;
+                }
+            }
+
+            if (wParam == WM_MOUSEWHEEL && !g_isBreakTimerEditing) {
+                short delta = GET_WHEEL_DELTA_WPARAM(pMouse->mouseData);
+                bool shiftPressed = (GetAsyncKeyState(VK_SHIFT) < 0);
+                int step = shiftPressed ? ((delta > 0) ? 5 : -5) : ((delta > 0) ? 60 : -60);
+
+                g_breakTimerRemainingSec += step;
+                if (g_breakTimerRemainingSec < 5) g_breakTimerRemainingSec = 5;
+                if (g_breakTimerRemainingSec > 5999) g_breakTimerRemainingSec = 5999;
+                g_breakTimerTotalSec = max(g_breakTimerTotalSec, g_breakTimerRemainingSec);
+                RedrawOverlay();
+                return 1;
+            }
+        }
 
         if (g_bindingMode != BindingMode::None) {
             DWORD pressedVk = 0;

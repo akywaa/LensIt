@@ -107,7 +107,7 @@ void ShowSettingsWindow(HINSTANCE hInstance) {
     UINT dpi = GetDpiForSystem();
     g_uiScale = (dpi > 0) ? ((float)dpi / 96.0f) : 1.0f;
 
-    s_animHeight = s_targetHeight = g_shortcutsExpanded ? 710.0f : 555.0f;
+    s_animHeight = s_targetHeight = g_shortcutsExpanded ? 725.0f : 555.0f;
     RECT wr = { 0, 0, (int)(340 * g_uiScale), (int)(s_animHeight * g_uiScale) };
     AdjustWindowRectEx(&wr, WS_POPUP | WS_CAPTION | WS_SYSMENU, FALSE, WS_EX_TOPMOST);
     int w = wr.right - wr.left;
@@ -276,7 +276,7 @@ void DrawCustomUI(Graphics& g) {
         &fmtNear, &textBrush);
 
     float startY = 520.0f;
-    float maxCardHeight = 172.0f;
+    float maxCardHeight = 188.0f;
     float visibleHeight = s_animHeight - startY - 14.0f;
 
     if ((g_shortcutsExpanded || s_animHeight > 555.0f) && visibleHeight > 10.0f) {
@@ -297,12 +297,13 @@ void DrawCustomUI(Graphics& g) {
             L"[Trigger] + LMB       : Draw Line\n"
             L"[Trigger] + RMB       : Draw Arrow\n"
             L"[Trigger] + Shift+LMB : Draw Rectangle\n"
-            L"[Trigger] + O         : Blackout Blur (Toggle)\n"
-            L"[Trigger] + H         : Highlighter (Toggle)\n"
+            L"[Trigger] + O / H     : Blackout / Highlighter\n"
+            L"[Trigger] + T         : Break Timer\n"
+            L"  * Wheel / Shift+Wh  : +/- min / sec\n"
+            L"  * Click clock to edit time directly\n"
             L"[Trigger] + MMB       : Step Badge (1, 2, 3..)\n"
             L"[Trigger] + P         : Pin drawings on screen\n"
-            L"[Trigger] + Z / C     : Undo / Copy Screenshot\n"
-            L"Trigger + P (or Esc)  : Clear & Exit";
+            L"[Trigger] + Z / C     : Undo / Screenshot";
 
         g.DrawString(shortcutsInfo.c_str(), -1, &fontCode, PointF(28, startY + 8.0f), &textDim);
 
@@ -390,7 +391,7 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         }
         else if (PtInRectCust(btnShortcutsHeader, x, y)) {
             g_shortcutsExpanded = !g_shortcutsExpanded;
-            s_targetHeight = g_shortcutsExpanded ? 710.0f : 555.0f;
+            s_targetHeight = g_shortcutsExpanded ? 725.0f : 555.0f;
             SetTimer(hwnd, 99, 14, NULL);
         }
         else if (PtInRectCust(colorLine, x, y) || PtInRectCust(colorArrow, x, y) || PtInRectCust(colorRect, x, y) || PtInRectCust(colorBadge, x, y)) {

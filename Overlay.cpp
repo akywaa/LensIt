@@ -19,6 +19,14 @@ static int s_toastHoldFrames = 0;
 static const int TOAST_W = 270;
 static const int TOAST_H = 68;
 
+// Break timer variables
+bool g_isBreakTimerActive = false;
+bool g_isBreakTimerPaused = false;
+bool g_isBreakTimerEditing = false;
+int g_breakTimerTotalSec = 300;
+int g_breakTimerRemainingSec = 300;
+std::wstring g_breakTimerInputStr;
+
 void DrawStroke(Graphics& g, const Stroke& stroke, int offX, int offY);
 
 static void EnsureConfigPath() {
@@ -78,6 +86,162 @@ void SaveConfig() {
     WritePrivateProfileStringA("Config", "FirstRun", buf, g_configBuf);
 
     WritePrivateProfileStringA(NULL, NULL, NULL, g_configBuf);
+}
+
+static bool ParseTimerString(const std::wstring& s, int& outSec) {
+    if (s.empty()) return false;
+    size_t colon = s.find_first_of(L":., ");
+    if (colon != std::wstring::npos) {
+        std::wstring mStr = s.substr(0, colon);
+        std::wstring sStr = s.substr(colon + 1);
+        int m = mStr.empty() ? 0 : _wtoi(mStr.c_str());
+        int sec = sStr.empty() ? 0 : _wtoi(sStr.c_str());
+        outSec = m * 60 + sec;
+        return outSec > 0;
+    }
+    int val = _wtoi(s.c_str());
+    if (val <= 0) return false;
+    if (s.length() == 3 || s.length() == 4) {
+        int sec = val % 100;
+        int m = val / 100;
+        if (sec < 60) {
+            outSec = m * 60 + sec;
+            return outSec > 0;
+        }
+    }
+    outSec = val * 60;
+    return outSec > 0;
+}
+
+void StartBreakTimer(int minutes) {
+    if (minutes < 1) minutes = 1;
+    g_breakTimerTotalSec = minutes * 60;
+    g_breakTimerRemainingSec = g_breakTimerTotalSec;
+    g_isBreakTimerActive = true;
+    g_isBreakTimerPaused = false;
+    g_isBreakTimerEditing = false;
+    g_breakTimerInputStr.clear();
+
+    if (g_hwndOverlay) {
+        SetTimer(g_hwndOverlay, 2, 1000, NULL);
+    }
+    RedrawOverlay();
+    ShowNotification(L"Break Timer", L"Started (" + std::to_wstring(minutes) + L" min)", RGB(0, 150, 255));
+}
+
+void StopBreakTimer() {
+    if (!g_isBreakTimerActive) return;
+    g_isBreakTimerActive = false;
+    g_isBreakTimerPaused = false;
+    g_isBreakTimerEditing = false;
+    g_breakTimerInputStr.clear();
+    if (g_hwndOverlay) {
+        KillTimer(g_hwndOverlay, 2);
+    }
+    RedrawOverlay();
+}
+
+void ToggleBreakTimer(int minutes) {
+    if (g_isBreakTimerActive) {
+        StopBreakTimer();
+        ShowNotification(L"Break Timer", L"Dismissed", RGB(220, 70, 70));
+    }
+    else {
+        StartBreakTimer(minutes);
+    }
+}
+
+void CommitBreakTimerInput() {
+    if (!g_isBreakTimerEditing) return;
+    int newSec = 0;
+    if (ParseTimerString(g_breakTimerInputStr, newSec)) {
+        if (newSec > 5999) newSec = 5999;
+        g_breakTimerRemainingSec = newSec;
+        g_breakTimerTotalSec = newSec;
+
+        int m = newSec / 60;
+        int s = newSec % 60;
+        wchar_t buf[32];
+        swprintf_s(buf, L"Set to %02d:%02d", m, s);
+        ShowNotification(L"Timer Updated", buf, RGB(0, 150, 255));
+    }
+    g_isBreakTimerEditing = false;
+    g_isBreakTimerPaused = false;
+    g_breakTimerInputStr.clear();
+    RedrawOverlay();
+}
+
+static void DrawBreakTimerUI(Graphics& g, int w, int h) {
+    SolidBrush dimBg(Color(220, 10, 10, 14));
+    g.FillRectangle(&dimBg, 0, 0, w, h);
+
+    Font fontClock(L"Segoe UI", 84.0f, FontStyleBold);
+    Font fontSub(L"Segoe UI", 13.0f, FontStyleBold);
+    Font fontHint(L"Segoe UI", 10.5f, FontStyleRegular);
+
+    StringFormat fmtCenter;
+    fmtCenter.SetAlignment(StringAlignmentCenter);
+    fmtCenter.SetLineAlignment(StringAlignmentCenter);
+
+    float cx = (float)w / 2.0f;
+    float cy = (float)h / 2.0f;
+
+    float totalW = 340.0f;
+    float barH = 6.0f;
+    float progress = (g_breakTimerTotalSec > 0) ? ((float)g_breakTimerRemainingSec / (float)g_breakTimerTotalSec) : 0.0f;
+    if (progress < 0.0f) progress = 0.0f;
+    if (progress > 1.0f) progress = 1.0f;
+
+    float barX = cx - totalW / 2.0f;
+    float barY = cy + 65.0f;
+
+    SolidBrush trackBg(Color(255, 45, 45, 52));
+    g.FillRectangle(&trackBg, barX, barY, totalW, barH);
+
+    Color accentCol = (g_breakTimerRemainingSec <= 30 && !g_isBreakTimerEditing) ? Color(255, 235, 60, 60) : Color(255, 0, 140, 255);
+    SolidBrush fillBrush(accentCol);
+    g.FillRectangle(&fillBrush, barX, barY, totalW * progress, barH);
+
+    RectF clockRect(cx - 300.0f, cy - 90.0f, 600.0f, 130.0f);
+
+    if (g_isBreakTimerEditing) {
+        // Interactive edit box frame
+        Pen editBorder(Color(255, 0, 160, 255), 2.0f);
+        SolidBrush editBg(Color(120, 20, 30, 45));
+        g.FillRectangle(&editBg, cx - 220.0f, cy - 85.0f, 440.0f, 125.0f);
+        g.DrawRectangle(&editBorder, cx - 220.0f, cy - 85.0f, 440.0f, 125.0f);
+
+        std::wstring disp = g_breakTimerInputStr.empty() ? L"__ : __" : (g_breakTimerInputStr + L"|");
+        SolidBrush textEdit(Color(255, 255, 255, 255));
+        g.DrawString(disp.c_str(), -1, &fontClock, clockRect, &fmtCenter, &textEdit);
+
+        SolidBrush textAccent(Color(255, 0, 160, 255));
+        RectF titleRect(cx - 300.0f, cy - 125.0f, 600.0f, 30.0f);
+        g.DrawString(L"SET CUSTOM TIME (TYPE AND PRESS ENTER)", -1, &fontSub, titleRect, &fmtCenter, &textAccent);
+
+        SolidBrush textHint(Color(255, 180, 180, 185));
+        RectF hintRect(cx - 300.0f, cy + 90.0f, 600.0f, 25.0f);
+        g.DrawString(L"Enter: confirm  *  Esc: cancel  *  Format: 3:50 or 5", -1, &fontHint, hintRect, &fmtCenter, &textHint);
+    }
+    else {
+        int mins = g_breakTimerRemainingSec / 60;
+        int secs = g_breakTimerRemainingSec % 60;
+        wchar_t timeBuf[32];
+        swprintf_s(timeBuf, L"%02d:%02d", mins, secs);
+
+        SolidBrush textWhite(g_breakTimerRemainingSec <= 30 ? Color(255, 255, 100, 100) : Color(255, 245, 245, 250));
+        g.DrawString(timeBuf, -1, &fontClock, clockRect, &fmtCenter, &textWhite);
+
+        SolidBrush textAccent(accentCol);
+        std::wstring titleStr = g_isBreakTimerPaused ? L"BREAK TIMER  *  [PAUSED]" : L"BREAK IN PROGRESS";
+        RectF titleRect(cx - 300.0f, cy - 125.0f, 600.0f, 30.0f);
+        g.DrawString(titleStr.c_str(), -1, &fontSub, titleRect, &fmtCenter, &textAccent);
+
+        SolidBrush textHint(Color(255, 160, 160, 165));
+        std::wstring hintStr = L"Wheel: min (+Shift: sec)  *  Click time: edit  *  Space: pause  *  Esc: exit";
+        RectF hintRect(cx - 300.0f, cy + 90.0f, 600.0f, 25.0f);
+        g.DrawString(hintStr.c_str(), -1, &fontHint, hintRect, &fmtCenter, &textHint);
+    }
 }
 
 void DestroyOverlayBackbuffer() {
@@ -141,12 +305,18 @@ void PresentOverlayFrame() {
         Bitmap surface(g_backWidth, g_backHeight, g_backStride, PixelFormat32bppPARGB, (BYTE*)g_dibBits);
         Graphics g(&surface);
         g.SetSmoothingMode(SmoothingModeAntiAlias);
+        g.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
 
-        int vScreenX = GetSystemMetrics(SM_XVIRTUALSCREEN);
-        int vScreenY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        if (g_isBreakTimerActive) {
+            DrawBreakTimerUI(g, g_backWidth, g_backHeight);
+        }
+        else {
+            int vScreenX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+            int vScreenY = GetSystemMetrics(SM_YVIRTUALSCREEN);
 
-        for (const auto& s : g_strokes) DrawStroke(g, s, vScreenX, vScreenY);
-        if (!g_currentStroke.points.empty()) DrawStroke(g, g_currentStroke, vScreenX, vScreenY);
+            for (const auto& s : g_strokes) DrawStroke(g, s, vScreenX, vScreenY);
+            if (!g_currentStroke.points.empty()) DrawStroke(g, g_currentStroke, vScreenX, vScreenY);
+        }
     }
 
     HDC screenDC = GetDC(NULL);
@@ -642,9 +812,25 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         return 1;
 
     case WM_TIMER:
-        UpdateCamera();
-        if (!RequiresZoomTimer()) StopZoomTimer();
-        return 0;
+        if (wParam == 1) {
+            UpdateCamera();
+            if (!RequiresZoomTimer()) StopZoomTimer();
+            return 0;
+        }
+        else if (wParam == 2) {
+            if (g_isBreakTimerActive && !g_isBreakTimerPaused && !g_isBreakTimerEditing) {
+                if (g_breakTimerRemainingSec > 0) {
+                    g_breakTimerRemainingSec--;
+                    RedrawOverlay();
+                    if (g_breakTimerRemainingSec == 0) {
+                        MessageBeep(MB_ICONASTERISK);
+                        ShowNotification(L"Break Ended", L"Time is up!", RGB(46, 204, 113));
+                    }
+                }
+            }
+            return 0;
+        }
+        break;
 
     case WM_DISPLAYCHANGE:
         g_targetZoom = 1.0f;

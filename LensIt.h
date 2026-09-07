@@ -90,6 +90,19 @@ extern bool g_persistentDrawingsActive;
 enum class ActiveToolMode { None, Highlight, Blur };
 extern ActiveToolMode g_activeToolMode;
 
+// Break Timer state
+extern bool g_isBreakTimerActive;
+extern bool g_isBreakTimerPaused;
+extern bool g_isBreakTimerEditing;
+extern int g_breakTimerTotalSec;
+extern int g_breakTimerRemainingSec;
+extern std::wstring g_breakTimerInputStr;
+
+void StartBreakTimer(int minutes = 5);
+void StopBreakTimer();
+void ToggleBreakTimer(int minutes = 5);
+void CommitBreakTimerInput();
+
 LRESULT CALLBACK OverlayWndProc(HWND, UINT, WPARAM, LPARAM);
 LRESULT CALLBACK SettingsWndProc(HWND, UINT, WPARAM, LPARAM);
 LRESULT CALLBACK ToastWndProc(HWND, UINT, WPARAM, LPARAM);

@@ -100,7 +100,6 @@ int APIENTRY WinMain(
         }
         Sleep(50);
     }
-    // ----------------------------------------------
 
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     HRESULT hrCo = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);

@@ -5,11 +5,11 @@
 
 # LensIt
 
-**A tiny, instant screen magnifier with on-screen annotation for Windows.**
+**A tiny, instant screen magnifier, on-screen annotation tool, and break timer for Windows.**
 
-Hold a key, scroll to zoom in on anything, and draw lines, arrows, rectangles, badges or blur out sensitive data right over your screen — perfect for presentations, tutorials, streams, or bug reporting.
+Hold a key, scroll to zoom in on anything, draw lines, arrows, rectangles, badges, blur out sensitive data, or launch a sleek countdown break timer right over your screen — perfect for presentations, tutorials, streams, lectures, or bug reporting.
 
-[Features](#-features) • [Usage](#-usage) • [Settings](#-settings) • [Installation](#-installation) • [Building from source](#-building-from-source) • [Русская версия](#-lensit-русская-версия)
+[Features](#-features) • [Usage](#-usage) • [Break Timer](#-break-countdown-timer) • [Settings](#-settings) • [Installation](#-installation) • [Building from source](#-building-from-source) • [Русская версия](#-lensit-русская-версия)
 
 </div>
 
@@ -27,6 +27,7 @@ Hold a key, scroll to zoom in on anything, and draw lines, arrows, rectangles, b
 - 🔢 **Step badges** — drop auto-incrementing numbered markers (1, 2, 3...) to guide attention step by step
 - 🖍️ **Highlighter mode** — translucent marker tool to emphasize text and UI elements
 - 🔲 **Blackout Blur** — quickly obscure passwords, tokens, API keys, or sensitive UI details
+- ⏳ **Break Countdown Timer** — modern translucent fullscreen timer for presentation breaks with minute/second scrubbing and direct time entry
 - 📌 **Pin Mode (Persistent drawings)** — keep annotations visible on screen as an interactive click-through overlay
 - 🎨 **Quick color palette** — switch ink colors instantly on the fly (`R`/`G`/`B`/`Y`)
 - 📋 **One-key screenshot** — copy your annotated view straight to the clipboard
@@ -46,6 +47,7 @@ Hold a key, scroll to zoom in on anything, and draw lines, arrows, rectangles, b
 | Place a step badge (1, 2, 3...) | Hold **Trigger Key** + Middle Mouse Button |
 | Toggle Highlighter | Hold **Trigger Key** + `H` |
 | Toggle Blackout Blur | Hold **Trigger Key** + `O` |
+| **Toggle Break Timer** | Hold **Trigger Key** + `T` |
 | Quick Color switch | Hold **Trigger Key** + `R` (Red) / `G` (Green) / `B` (Blue) / `Y` (Yellow) |
 | Undo last stroke | Hold **Trigger Key** + `Z` |
 | Copy screenshot to clipboard | Hold **Trigger Key** + `C` |
@@ -59,6 +61,18 @@ Hold a key, scroll to zoom in on anything, and draw lines, arrows, rectangles, b
 > [!WARNING]
 > **A note for gamers:** LensIt overlays the screen and hooks system-wide magnification, which does **not** work over applications running in true **exclusive fullscreen** mode (e.g. *Geometry Dash*, *Counter-Strike 2*, and many other games).
 > To use LensIt with these, switch the game's display mode to **Borderless / Windowed Borderless** (or plain Windowed) instead of Fullscreen — this is usually found in the game's video/graphics settings.
+
+## ⏳ Break Countdown Timer
+
+Need a 5-minute break or want to give the audience time for an exercise during a webinar, lecture, or stream? 
+
+Press **`[Trigger] + T`** to bring up a modern translucent backdrop with a smooth countdown clock and progress bar:
+- **Adjust by Minutes:** Scroll the mouse wheel (or press `↑` / `↓`)
+- **Adjust by Seconds:** Hold `Shift` while scrolling (or `Shift + ↑` / `Shift + ↓`) to step by $\pm 5$ seconds
+- **Click to Enter Custom Time:** Click directly on the clock to type any exact time (e.g. `3:50`, `10`, `:45`), then hit `Enter`
+- **Pause / Resume:** Press `Space`
+- **Dismiss / Exit:** Press `Esc` (or `[Trigger] + T`)
+- **Alarm:** Plays a subtle system chime and displays a toast notification when the timer expires
 
 ## ⚙️ Settings
 
@@ -100,7 +114,7 @@ The project links against `magnification.lib`, `gdiplus.lib`, `dwmapi.lib`, `shl
 
 - **C++** with the native Win32 API
 - **Windows Magnification API** for high-performance hardware-accelerated zoom
-- **GDI+** for rendering smooth anti-aliased annotations, blur baking, and dark-themed UI
+- **GDI+** for rendering smooth anti-aliased annotations, blur baking, break timer HUD, and dark-themed UI
 - **Low-level keyboard & mouse hooks** for global input capture
 
 ---
@@ -110,11 +124,11 @@ The project links against `magnification.lib`, `gdiplus.lib`, `dwmapi.lib`, `shl
 
 # 🔎 LensIt — русская версия
 
-**Компактная лупа для экрана с инструментами аннотаций поверх экрана для Windows.**
+**Компактная лупа для экрана с инструментами аннотаций и стильным таймером перерыва для Windows.**
 
-Зажми клавишу, крути колесо мыши, чтобы приблизить нужную область, рисуй линии, стрелки, прямоугольники, расставляй шаги или размывай конфиденциальные данные прямо на экране — удобно для презентаций, обучающих видео, стримов и баг-репортов.
+Зажми клавишу, крути колесо мыши, чтобы приблизить нужную область, рисуй линии, стрелки, прямоугольники, расставляй шаги, размывай конфиденциальные данные или запускай таймер перерыва прямо на экране — идеально для презентаций, обучающих видео, лекций, стримов и баг-репортов.
 
-[Возможности](#-возможности) • [Использование](#-использование) • [Настройки](#-настройки) • [Установка](#-установка) • [Сборка из исходников](#-сборка-из-исходников)
+[Возможности](#-возможности) • [Использование](#-использование) • [Таймер перерыва](#-таймер-перерыва-break-timer) • [Настройки](#-настройки) • [Установка](#-установка) • [Сборка из исходников](#-сборка-из-исходников)
 
 </div>
 
@@ -132,6 +146,7 @@ The project links against `magnification.lib`, `gdiplus.lib`, `dwmapi.lib`, `shl
 - 🔢 **Бейджи шагов** — расставляй круглые маркеры с автоматической нумерацией (1, 2, 3...), чтобы вести зрителя по шагам
 - 🖍️ **Режим маркера (Highlighter)** — полупрозрачное выделение текста и ключевых элементов
 - 🔲 **Размытие и цензура (Blur)** — быстрое скрытие паролей, токенов, ключей и личных данных
+- ⏳ **Таймер перерыва (Break Timer)** — эстетичный экран обратного отсчёта для перерывов на лекциях с пошаговой настройкой секунд и ручным вводом времени
 - 📌 **Закрепление рисунков (Pin Mode)** — сохранение аннотаций на экране в виде прозрачного для кликов слоя
 - 🎨 **Быстрая смена цветов** — мгновенное переключение цвета чернил на лету (`R`/`G`/`B`/`Y`)
 - 📋 **Скриншот в буфер обмена** — копирование экрана вместе со всеми рисунками в один клик
@@ -151,6 +166,7 @@ The project links against `magnification.lib`, `gdiplus.lib`, `dwmapi.lib`, `shl
 | Поставить бейдж шага (1, 2, 3...) | Зажать **клавишу-триггер** + СКМ (клик колесом мыши) |
 | Включить / выключить маркер | Зажать **клавишу-триггер** + `H` |
 | Включить / выключить размытие (блюр) | Зажать **клавишу-триггер** + `O` |
+| **Включить / выключить таймер перерыва** | Зажать **клавишу-триггер** + `T` |
 | Быстро сменить цвет | Зажать **клавишу-триггер** + `R` (красный) / `G` (зеленый) / `B` (синий) / `Y` (желтый) |
 | Отменить последнее действие | Зажать **клавишу-триггер** + `Z` |
 | Скопировать скриншот с рисунками | Зажать **клавишу-триггер** + `C` |
@@ -164,6 +180,18 @@ The project links against `magnification.lib`, `gdiplus.lib`, `dwmapi.lib`, `shl
 > [!WARNING]
 > **Примечание для геймеров:** LensIt накладывается поверх экрана и использует системное приближение, которое **не работает** поверх приложений, запущенных в настоящем **полноэкранном (exclusive fullscreen) режиме** (например, *Geometry Dash*, *Counter-Strike 2* и многие другие игры).
 > Чтобы LensIt работал с такими играми, переключи режим экрана игры на **оконный без рамки (Borderless / Windowed Borderless)** или обычный оконный режим вместо полноэкранного — это обычно находится в настройках видео/графики игры.
+
+## ⏳ Таймер перерыва (Break Timer)
+
+Нужно объявить 5-минутный перерыв или дать аудитории время на выполнение задания во время созвона, вебинара или стрима?
+
+Нажмите **`[Триггер] + T`**, чтобы затемнить экран стильным полупрозрачным фоном с крупным таймером и прогресс-баром:
+- **Регулировка по минутам:** крутите колесо мыши (или клавиши `↑` / `↓`)
+- **Регулировка по секундам:** зажмите `Shift` и крутите колесо (или `Shift + ↑` / `Shift + ↓`) для шага $\pm 5$ секунд
+- **Ручной ввод времени:** кликните ЛКМ прямо по цифрам времени, введите с клавиатуры нужное значение (например, `3:50`, `10` или `:45`) и нажмите `Enter`
+- **Пауза / Продолжить:** нажмите `Пробел`
+- **Закрыть таймер:** нажмите `Esc` (или снова `[Триггер] + T`)
+- **Окончание времени:** мягкий звуковой сигнал системы и Toast-уведомление об окончании перерыва
 
 ## ⚙️ Настройки
 
@@ -205,5 +233,5 @@ The project links against `magnification.lib`, `gdiplus.lib`, `dwmapi.lib`, `shl
 
 - **C++** с нативным Win32 API
 - **Windows Magnification API** для плавного аппаратного масштабирования экрана
-- **GDI+** для сглаженной отрисовки аннотаций, генерации размытия и интерфейса настроек
+- **GDI+** для сглаженной отрисовки аннотаций, генерации размытия, графики таймера и интерфейса настроек
 - **Низкоуровневые хуки клавиатуры и мыши** для глобального перехвата ввода

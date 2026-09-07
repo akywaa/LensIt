@@ -7,7 +7,7 @@
 
 **A tiny, instant screen magnifier with on-screen annotation for Windows.**
 
-Hold a key, scroll to zoom in on anything, and draw lines, arrows or rectangles right over your screen to point things out — perfect for presentations, tutorials, streams, or just showing someone something on your screen.
+Hold a key, scroll to zoom in on anything, and draw lines, arrows, rectangles, badges or blur out sensitive data right over your screen — perfect for presentations, tutorials, streams, or bug reporting.
 
 [Features](#-features) • [Usage](#-usage) • [Settings](#-settings) • [Installation](#-installation) • [Building from source](#-building-from-source) • [Русская версия](#-lensit-русская-версия)
 
@@ -23,8 +23,15 @@ Hold a key, scroll to zoom in on anything, and draw lines, arrows or rectangles 
 - 📦 Zero dependencies — runs out-of-the-box on clean Windows 10 & 11
 
 - 🔍 **Instant magnifier** — hold your trigger key and scroll the mouse wheel to zoom smoothly in on the cursor
-- ✏️ **On-screen drawing** — draw lines, arrows and rectangles directly over your screen while zoomed
-- 🎛️ **Fully customizable** — pick your own trigger key, modifier key, colors and stroke widths for every tool
+- ✏️ **Rich annotation tools** — draw smooth freehand lines, directional arrows, and rectangles
+- 🔢 **Step badges** — drop auto-incrementing numbered markers (1, 2, 3...) to guide attention step by step
+- 🖍️ **Highlighter mode** — translucent marker tool to emphasize text and UI elements
+- 🔲 **Blackout Blur** — quickly obscure passwords, tokens, API keys, or sensitive UI details
+- 📌 **Pin Mode (Persistent drawings)** — keep annotations visible on screen as an interactive click-through overlay
+- 🎨 **Quick color palette** — switch ink colors instantly on the fly (`R`/`G`/`B`/`Y`)
+- 📋 **One-key screenshot** — copy your annotated view straight to the clipboard
+- 🔔 **Subtle Toast HUD** — minimal on-screen notifications for mode toggles, color changes, and actions
+- 🎛️ **Fully customizable** — pick your own trigger key, modifier key, colors, and stroke widths for every tool
 - 🧷 **Lives in the tray** — no taskbar clutter, right-click the tray icon for settings or to exit
 - 💾 **Persistent config** — all your settings are saved to a local `config.ini` next to the executable
 
@@ -36,10 +43,18 @@ Hold a key, scroll to zoom in on anything, and draw lines, arrows or rectangles 
 | Draw a line | Hold **Trigger Key** + Left Mouse Button |
 | Draw an arrow | Hold **Trigger Key** + Right Mouse Button |
 | Draw a rectangle | Hold **Trigger Key** + **Rectangle Key** (default `Shift`) + Left Mouse Button |
+| Place a step badge (1, 2, 3...) | Hold **Trigger Key** + Middle Mouse Button |
+| Toggle Highlighter | Hold **Trigger Key** + `H` |
+| Toggle Blackout Blur | Hold **Trigger Key** + `O` |
+| Quick Color switch | Hold **Trigger Key** + `R` (Red) / `G` (Green) / `B` (Blue) / `Y` (Yellow) |
+| Undo last stroke | Hold **Trigger Key** + `Z` |
+| Copy screenshot to clipboard | Hold **Trigger Key** + `C` |
+| Pin drawings (keep on screen) | Hold **Trigger Key** + `P` |
 | Reset zoom & clear drawings | `Esc` |
 | Open settings / Exit | Right-click the tray icon |
 
-Releasing the trigger key clears all drawings on screen. Optionally, you can also make it reset the zoom level automatically — see [Settings](#-settings).
+> [!TIP]
+> By default, releasing the trigger key clears unpinned drawings. You can toggle **"Keep drawings on screen"** or enable **"Reset zoom on release"** in the settings.
 
 > [!WARNING]
 > **A note for gamers:** LensIt overlays the screen and hooks system-wide magnification, which does **not** work over applications running in true **exclusive fullscreen** mode (e.g. *Geometry Dash*, *Counter-Strike 2*, and many other games).
@@ -49,10 +64,13 @@ Releasing the trigger key clears all drawings on screen. Optionally, you can als
 
 Right-click the tray icon → **Settings** to open the settings panel, where you can configure:
 
-- **Trigger Key** — the key you hold to activate zoom & drawing mode
-- **Rectangle Modifier Key** — the extra key held together with the trigger key to draw rectangles instead of lines
-- **Reset zoom on trigger key release** — automatically snap back to 1x zoom when you let go
-- **Line / Arrow / Rectangle** — individual color pickers and width sliders for each drawing tool
+- **Trigger Key** — the key or mouse button (X1/X2/Middle) you hold to activate zoom & drawing mode
+- **Reset zoom on trigger release** — automatically snap back to 1x zoom when letting go of the trigger
+- **Keep drawings on screen** — make your drawings persist and remain click-through after releasing the trigger
+- **Line / Arrow / Rectangle** — individual color pickers and width sliders for every tool
+- **Rectangle Modifier Key** — the extra key held together with the trigger key to draw rectangles
+- **Step Badge Color** — customizable color for numbered step indicators
+- **Shortcuts & Hotkeys Drawer** — an interactive expandable cheat sheet showing all built-in hotkeys
 
 All changes are saved automatically to `config.ini`.
 
@@ -62,7 +80,7 @@ All changes are saved automatically to `config.ini`.
 2. Download the latest `AkwaLens.exe` (or `LensIt.exe`)
 3. Run it — that's it, no installer needed
 
-> LensIt is a portable, single-file executable. To uninstall, simply delete the `.exe` (and the generated `config.ini`, if any).
+> LensIt is a portable, single-file executable. On first launch, a welcome dialog helps you optionally configure automatic Windows startup and create a desktop shortcut. To uninstall, simply delete the `.exe` (and the generated `config.ini`, if any).
 
 ## 🛠 Building from source
 
@@ -76,13 +94,13 @@ All changes are saved automatically to `config.ini`.
 3. Select the `Release` configuration (`x64` recommended)
 4. Build (`Ctrl+Shift+B`)
 
-The project links against `magnification.lib`, `gdiplus.lib`, `dwmapi.lib` and other standard Windows libraries — no external dependencies required.
+The project links against `magnification.lib`, `gdiplus.lib`, `dwmapi.lib`, `shlwapi.lib` and other standard Windows libraries — no external dependencies required.
 
 ## 🧩 Tech stack
 
 - **C++** with the native Win32 API
-- **Windows Magnification API** for the zoom effect
-- **GDI+** for rendering the on-screen drawings and settings UI
+- **Windows Magnification API** for high-performance hardware-accelerated zoom
+- **GDI+** for rendering smooth anti-aliased annotations, blur baking, and dark-themed UI
 - **Low-level keyboard & mouse hooks** for global input capture
 
 ---
@@ -92,9 +110,9 @@ The project links against `magnification.lib`, `gdiplus.lib`, `dwmapi.lib` and o
 
 # 🔎 LensIt — русская версия
 
-**Компактная лупа для экрана с рисованием поверх экрана для Windows.**
+**Компактная лупа для экрана с инструментами аннотаций поверх экрана для Windows.**
 
-Зажми клавишу, крути колесо мыши, чтобы приблизить нужную область, и рисуй линии, стрелки или прямоугольники прямо поверх экрана — удобно для презентаций, обучающих видео, стримов или просто чтобы показать что-то собеседнику.
+Зажми клавишу, крути колесо мыши, чтобы приблизить нужную область, рисуй линии, стрелки, прямоугольники, расставляй шаги или размывай конфиденциальные данные прямо на экране — удобно для презентаций, обучающих видео, стримов и баг-репортов.
 
 [Возможности](#-возможности) • [Использование](#-использование) • [Настройки](#-настройки) • [Установка](#-установка) • [Сборка из исходников](#-сборка-из-исходников)
 
@@ -110,8 +128,15 @@ The project links against `magnification.lib`, `gdiplus.lib`, `dwmapi.lib` and o
 - 📦 Никаких зависимостей — работает "из коробки" на чистой Windows 10 и 11
 
 - 🔍 **Мгновенная лупа** — зажми клавишу-триггер и крути колесо мыши, чтобы плавно приблизить область вокруг курсора
-- ✏️ **Рисование поверх экрана** — рисуй линии, стрелки и прямоугольники прямо на экране во время приближения
-- 🎛️ **Полная настройка** — выбери свою клавишу-триггер, модификатор, цвета и толщину линий для каждого инструмента
+- ✏️ **Набор для аннотаций** — рисуй плавные произвольные линии, стрелки и прямоугольники
+- 🔢 **Бейджи шагов** — расставляй круглые маркеры с автоматической нумерацией (1, 2, 3...), чтобы вести зрителя по шагам
+- 🖍️ **Режим маркера (Highlighter)** — полупрозрачное выделение текста и ключевых элементов
+- 🔲 **Размытие и цензура (Blur)** — быстрое скрытие паролей, токенов, ключей и личных данных
+- 📌 **Закрепление рисунков (Pin Mode)** — сохранение аннотаций на экране в виде прозрачного для кликов слоя
+- 🎨 **Быстрая смена цветов** — мгновенное переключение цвета чернил на лету (`R`/`G`/`B`/`Y`)
+- 📋 **Скриншот в буфер обмена** — копирование экрана вместе со всеми рисунками в один клик
+- 🔔 **Всплывающие Toast-уведомления** — аккуратный анимированный HUD с информацией о режимах и действиях
+- 🎛️ **Полная настройка** — выбери свою клавишу-триггер, модификатор, цвета и толщину для каждого инструмента
 - 🧷 **Работает из трея** — не занимает панель задач, все настройки и выход — через иконку в трее
 - 💾 **Сохранение настроек** — все параметры сохраняются в локальный `config.ini` рядом с исполняемым файлом
 
@@ -123,10 +148,18 @@ The project links against `magnification.lib`, `gdiplus.lib`, `dwmapi.lib` and o
 | Нарисовать линию | Зажать **клавишу-триггер** + ЛКМ |
 | Нарисовать стрелку | Зажать **клавишу-триггер** + ПКМ |
 | Нарисовать прямоугольник | Зажать **клавишу-триггер** + **клавишу для прямоугольника** (по умолчанию `Shift`) + ЛКМ |
+| Поставить бейдж шага (1, 2, 3...) | Зажать **клавишу-триггер** + СКМ (клик колесом мыши) |
+| Включить / выключить маркер | Зажать **клавишу-триггер** + `H` |
+| Включить / выключить размытие (блюр) | Зажать **клавишу-триггер** + `O` |
+| Быстро сменить цвет | Зажать **клавишу-триггер** + `R` (красный) / `G` (зеленый) / `B` (синий) / `Y` (желтый) |
+| Отменить последнее действие | Зажать **клавишу-триггер** + `Z` |
+| Скопировать скриншот с рисунками | Зажать **клавишу-триггер** + `C` |
+| Закрепить рисунки на экране | Зажать **клавишу-триггер** + `P` |
 | Сбросить приближение и рисунки | `Esc` |
 | Открыть настройки / Выйти | ПКМ по иконке в трее |
 
-При отпускании клавиши-триггера все рисунки на экране очищаются. При желании можно включить автоматический сброс приближения — см. раздел [Настройки](#-настройки).
+> [!TIP]
+> По умолчанию при отпускании клавиши-триггера рисунки очищаются. Вы можете закрепить их клавишей `P` (или через настройку **"Keep drawings on screen"**), а также включить автоматический сброс приближения при отпускании клавиши.
 
 > [!WARNING]
 > **Примечание для геймеров:** LensIt накладывается поверх экрана и использует системное приближение, которое **не работает** поверх приложений, запущенных в настоящем **полноэкранном (exclusive fullscreen) режиме** (например, *Geometry Dash*, *Counter-Strike 2* и многие другие игры).
@@ -136,10 +169,13 @@ The project links against `magnification.lib`, `gdiplus.lib`, `dwmapi.lib` and o
 
 ПКМ по иконке в трее → **Settings**, чтобы открыть панель настроек, где можно изменить:
 
-- **Trigger Key** — клавиша, которую нужно зажимать для активации приближения и рисования
-- **Rectangle Modifier Key** — дополнительная клавиша, которую нужно зажимать вместе с триггером для рисования прямоугольников вместо линий
-- **Reset zoom on trigger key release** — автоматический сброс приближения до 1x при отпускании клавиши
-- **Line / Arrow / Rectangle** — отдельные выбор цвета и толщины для каждого инструмента рисования
+- **Trigger Key** — клавиша или кнопка мыши (боковые кнопки X1/X2, колесико), которую нужно зажимать для активации
+- **Reset zoom on trigger release** — автоматический сброс приближения до 1x при отпускании триггера
+- **Keep drawings on screen** — сохранять рисунки на экране после отпускания клавиши (сквозной оверлей)
+- **Line / Arrow / Rectangle** — раздельный выбор цвета и ползунки толщины для каждого инструмента
+- **Rectangle Modifier Key** — клавиша для рисования прямоугольников
+- **Step Badge Color** — выбор цвета для нумерованных маркеров
+- **Shortcuts & Hotkeys** — встроенная раскрывающаяся карточка-шпаргалка со всеми горячими клавишами
 
 Все изменения сохраняются автоматически в `config.ini`.
 
@@ -149,7 +185,7 @@ The project links against `magnification.lib`, `gdiplus.lib`, `dwmapi.lib` and o
 2. Скачай последнюю версию `AkwaLens.exe` (или `LensIt.exe`)
 3. Запусти — установка не требуется
 
-> LensIt — портативный исполняемый файл. Чтобы удалить программу, просто удали `.exe` (и файл `config.ini`, если он создался).
+> LensIt — портативный исполняемый файл. При первом запуске появится стартовое окно с возможностью включить автозапуск с Windows и создать ярлык на рабочем столе. Чтобы удалить программу, просто удали `.exe` (и файл `config.ini`, если он создался).
 
 ## 🛠 Сборка из исходников
 
@@ -163,11 +199,11 @@ The project links against `magnification.lib`, `gdiplus.lib`, `dwmapi.lib` and o
 3. Выбери конфигурацию `Release` (рекомендуется `x64`)
 4. Собери проект (`Ctrl+Shift+B`)
 
-Проект использует `magnification.lib`, `gdiplus.lib`, `dwmapi.lib` и другие стандартные библиотеки Windows — внешние зависимости не требуются.
+Проект использует `magnification.lib`, `gdiplus.lib`, `dwmapi.lib`, `shlwapi.lib` и другие стандартные библиотеки Windows — внешние зависимости не требуются.
 
 ## 🧩 Технологии
 
 - **C++** с нативным Win32 API
-- **Windows Magnification API** для эффекта приближения
-- **GDI+** для отрисовки рисунков поверх экрана и интерфейса настроек
+- **Windows Magnification API** для плавного аппаратного масштабирования экрана
+- **GDI+** для сглаженной отрисовки аннотаций, генерации размытия и интерфейса настроек
 - **Низкоуровневые хуки клавиатуры и мыши** для глобального перехвата ввода

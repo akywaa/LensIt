@@ -26,6 +26,49 @@ RECT btnShortcutsHeader = { 20, 480, 320, 510 };
 
 int draggingSlider = 0;
 
+enum class ColorPickerTarget {
+    None,
+    Line,
+    Arrow,
+    Rect,
+    Badge
+};
+
+static bool s_pickerOpen = false;
+static ColorPickerTarget s_pickerTarget = ColorPickerTarget::None;
+static COLORREF s_pickerColor = RGB(255, 255, 255);
+static COLORREF s_pickerOriginalColor = RGB(255, 255, 255);
+static int s_pickerDraggingSlider = 0; // 1 = R, 2 = G, 3 = B
+
+static const COLORREF s_paletteColors[16] = {
+    RGB(255, 59, 48),    // Red
+    RGB(255, 107, 74),   // Coral
+    RGB(255, 149, 0),    // Orange
+    RGB(255, 204, 0),    // Amber Yellow
+    RGB(46, 204, 113),   // Emerald Green
+    RGB(52, 199, 89),    // Light Green
+    RGB(0, 199, 190),    // Mint Cyan
+    RGB(45, 200, 255),   // LensIt Sky Blue
+    RGB(0, 122, 255),    // Accent Blue
+    RGB(88, 86, 214),    // Indigo
+    RGB(175, 82, 222),   // Purple
+    RGB(255, 45, 85),    // Hot Pink
+    RGB(241, 196, 15),   // Badge Gold
+    RGB(255, 255, 255),  // Pure White
+    RGB(142, 142, 147),  // Neutral Gray
+    RGB(34, 34, 38)      // Dark Gray / Black
+};
+
+static const RECT pickerCard = { 22, 90, 318, 415 };
+static const RECT btnPickerClose = { 286, 98, 310, 122 };
+static const RECT btnPickerCancel = { 34, 366, 166, 400 };
+static const RECT btnPickerApply = { 174, 366, 306, 400 };
+
+static const RECT rectTrackR = { 86, 258, 270, 276 };
+static const RECT rectTrackG = { 86, 288, 270, 306 };
+static const RECT rectTrackB = { 86, 318, 270, 336 };
+
+// Helper drawing routines
 static void AddRoundedRect(GraphicsPath& path, float x, float y, float w, float h, float radius) {
     float d = radius * 2.0f;
     if (d > w) d = w;
@@ -130,6 +173,197 @@ void ShowSettingsWindow(HINSTANCE hInstance) {
 
 bool PtInRectCust(RECT r, int x, int y) {
     return (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom);
+}
+
+// Color Picker Helpers
+static COLORREF* GetTargetColorPtr(ColorPickerTarget target) {
+    switch (target) {
+    case ColorPickerTarget::Line:  return &g_config.lineColor;
+    case ColorPickerTarget::Arrow: return &g_config.arrowColor;
+    case ColorPickerTarget::Rect:  return &g_config.rectColor;
+    case ColorPickerTarget::Badge: return &g_config.badgeColor;
+    default: return nullptr;
+    }
+}
+
+static void OpenColorPicker(ColorPickerTarget target) {
+    COLORREF* p = GetTargetColorPtr(target);
+    if (!p) return;
+    s_pickerTarget = target;
+    s_pickerColor = *p;
+    s_pickerOriginalColor = *p;
+    s_pickerOpen = true;
+    s_pickerDraggingSlider = 0;
+}
+
+static void ApplyColorPicker() {
+    COLORREF* p = GetTargetColorPtr(s_pickerTarget);
+    if (p) {
+        *p = s_pickerColor;
+        SaveConfig();
+    }
+    s_pickerOpen = false;
+    s_pickerTarget = ColorPickerTarget::None;
+}
+
+static void CancelColorPicker() {
+    COLORREF* p = GetTargetColorPtr(s_pickerTarget);
+    if (p) {
+        *p = s_pickerOriginalColor;
+        SaveConfig();
+    }
+    s_pickerOpen = false;
+    s_pickerTarget = ColorPickerTarget::None;
+}
+
+static RECT GetPaletteSwatchRect(int index) {
+    int row = index / 8;
+    int col = index % 8;
+    int left = 34 + col * 34;
+    int top = 188 + row * 30;
+    return RECT{ left, top, left + 26, top + 22 };
+}
+
+static void DrawColorPickerModal(Graphics& g) {
+    if (!s_pickerOpen) return;
+
+    // 1. Semi-transparent backdrop overlay
+    SolidBrush dimBrush(Color(180, 8, 8, 12));
+    g.FillRectangle(&dimBrush, 0, 0, 340, (int)s_animHeight + 40);
+
+    // 2. Card Background & Outer Glow
+    GraphicsPath cardPath;
+    AddRoundedRect(cardPath, (float)pickerCard.left, (float)pickerCard.top,
+        (float)(pickerCard.right - pickerCard.left), (float)(pickerCard.bottom - pickerCard.top), 8.0f);
+
+    SolidBrush cardBg(Color(255, 26, 26, 30));
+    g.FillPath(&cardBg, &cardPath);
+
+    Pen cardBorder(Color(255, 62, 62, 70), 1.0f);
+    g.DrawPath(&cardBorder, &cardPath);
+
+    // 3. Header & Title
+    Font fontTitle(L"Segoe UI", 10.0f, FontStyleBold);
+    Font fontReg(L"Segoe UI", 9.0f);
+    Font fontSmall(L"Segoe UI", 8.0f);
+    Font fontCode(L"Consolas", 9.5f, FontStyleBold);
+
+    SolidBrush textWhite(Color(255, 240, 240, 245));
+    SolidBrush textDim(Color(255, 150, 150, 158));
+
+    std::wstring title = L"Select Color";
+    if (s_pickerTarget == ColorPickerTarget::Line) title = L"Line Color";
+    else if (s_pickerTarget == ColorPickerTarget::Arrow) title = L"Arrow Color";
+    else if (s_pickerTarget == ColorPickerTarget::Rect) title = L"Rectangle Color";
+    else if (s_pickerTarget == ColorPickerTarget::Badge) title = L"Step Badge Color";
+
+    g.DrawString(title.c_str(), -1, &fontTitle, PointF(36.0f, 104.0f), &textWhite);
+
+    // Close button [x]
+    Pen xPen(Color(255, 170, 170, 175), 1.5f);
+    xPen.SetStartCap(LineCapRound);
+    xPen.SetEndCap(LineCapRound);
+    g.DrawLine(&xPen, 293, 105, 303, 115);
+    g.DrawLine(&xPen, 303, 105, 293, 115);
+
+    // 4. Color Comparison & Hex Value
+    // Current (Old) Color Box
+    GraphicsPath oldBoxPath;
+    AddRoundedRect(oldBoxPath, 34.0f, 136.0f, 38.0f, 30.0f, 4.0f);
+    SolidBrush oldColorBrush(Color(255, GetRValue(s_pickerOriginalColor), GetGValue(s_pickerOriginalColor), GetBValue(s_pickerOriginalColor)));
+    g.FillPath(&oldColorBrush, &oldBoxPath);
+    Pen borderPen(Color(255, 55, 55, 60), 1.0f);
+    g.DrawPath(&borderPen, &oldBoxPath);
+    g.DrawString(L"OLD", -1, &fontSmall, PointF(41.0f, 168.0f), &textDim);
+
+    // New Color Box
+    GraphicsPath newBoxPath;
+    AddRoundedRect(newBoxPath, 80.0f, 136.0f, 48.0f, 30.0f, 4.0f);
+    SolidBrush newColorBrush(Color(255, GetRValue(s_pickerColor), GetGValue(s_pickerColor), GetBValue(s_pickerColor)));
+    g.FillPath(&newColorBrush, &newBoxPath);
+    Pen newBorderPen(Color(255, 90, 90, 100), 1.0f);
+    g.DrawPath(&newBorderPen, &newBoxPath);
+    g.DrawString(L"NEW", -1, &fontSmall, PointF(92.0f, 168.0f), &textDim);
+
+    // Hex String Display Box
+    GraphicsPath hexPath;
+    AddRoundedRect(hexPath, 138.0f, 136.0f, 168.0f, 30.0f, 4.0f);
+    SolidBrush hexBg(Color(255, 20, 20, 22));
+    g.FillPath(&hexBg, &hexPath);
+    Pen hexBorder(Color(255, 48, 48, 55), 1.0f);
+    g.DrawPath(&hexBorder, &hexPath);
+
+    wchar_t hexBuf[32];
+    swprintf_s(hexBuf, L"#%02X%02X%02X", GetRValue(s_pickerColor), GetGValue(s_pickerColor), GetBValue(s_pickerColor));
+    StringFormat fmtCenter;
+    fmtCenter.SetAlignment(StringAlignmentCenter);
+    fmtCenter.SetLineAlignment(StringAlignmentCenter);
+    g.DrawString(hexBuf, -1, &fontCode, RectF(138.0f, 136.0f, 168.0f, 30.0f), &fmtCenter, &textWhite);
+
+    // 5. Palette Swatches (16 vibrant presets)
+    for (int i = 0; i < 16; ++i) {
+        RECT r = GetPaletteSwatchRect(i);
+        GraphicsPath swatchPath;
+        AddRoundedRect(swatchPath, (float)r.left, (float)r.top, (float)(r.right - r.left), (float)(r.bottom - r.top), 4.0f);
+
+        COLORREF c = s_paletteColors[i];
+        SolidBrush swatchBrush(Color(255, GetRValue(c), GetGValue(c), GetBValue(c)));
+        g.FillPath(&swatchBrush, &swatchPath);
+
+        if (c == s_pickerColor) {
+            Pen selPen(Color(255, 255, 255, 255), 2.0f);
+            g.DrawPath(&selPen, &swatchPath);
+        }
+        else {
+            Pen swatchBorder(Color(255, 45, 45, 50), 1.0f);
+            g.DrawPath(&swatchBorder, &swatchPath);
+        }
+    }
+
+    // 6. RGB Custom Sliders
+    int rVal = GetRValue(s_pickerColor);
+    int gVal = GetGValue(s_pickerColor);
+    int bVal = GetBValue(s_pickerColor);
+
+    // Labels with value
+    wchar_t bufVal[16];
+    swprintf_s(bufVal, L"R  %3d", rVal);
+    g.DrawString(bufVal, -1, &fontSmall, PointF(34.0f, 260.0f), &textDim);
+    DrawModernSlider(g, rectTrackR, rVal, 0, 255, RGB(235, 60, 60));
+
+    swprintf_s(bufVal, L"G  %3d", gVal);
+    g.DrawString(bufVal, -1, &fontSmall, PointF(34.0f, 290.0f), &textDim);
+    DrawModernSlider(g, rectTrackG, gVal, 0, 255, RGB(60, 200, 90));
+
+    swprintf_s(bufVal, L"B  %3d", bVal);
+    g.DrawString(bufVal, -1, &fontSmall, PointF(34.0f, 320.0f), &textDim);
+    DrawModernSlider(g, rectTrackB, bVal, 0, 255, RGB(60, 145, 255));
+
+    // 7. Action Buttons (Cancel / Apply)
+    // Cancel
+    GraphicsPath btnCancelPath;
+    AddRoundedRect(btnCancelPath, (float)btnPickerCancel.left, (float)btnPickerCancel.top,
+        (float)(btnPickerCancel.right - btnPickerCancel.left), (float)(btnPickerCancel.bottom - btnPickerCancel.top), 5.0f);
+    SolidBrush cancelBg(Color(255, 34, 34, 40));
+    g.FillPath(&cancelBg, &btnCancelPath);
+    Pen cancelBorder(Color(255, 60, 60, 68), 1.0f);
+    g.DrawPath(&cancelBorder, &btnCancelPath);
+    g.DrawString(L"Cancel", -1, &fontReg,
+        RectF((REAL)btnPickerCancel.left, (REAL)btnPickerCancel.top, (REAL)(btnPickerCancel.right - btnPickerCancel.left), (REAL)(btnPickerCancel.bottom - btnPickerCancel.top)),
+        &fmtCenter, &textWhite);
+
+    // Apply
+    GraphicsPath btnApplyPath;
+    AddRoundedRect(btnApplyPath, (float)btnPickerApply.left, (float)btnPickerApply.top,
+        (float)(btnPickerApply.right - btnPickerApply.left), (float)(btnPickerApply.bottom - btnPickerApply.top), 5.0f);
+    SolidBrush applyBg(Color(255, 0, 120, 215));
+    g.FillPath(&applyBg, &btnApplyPath);
+    Pen applyBorder(Color(255, 0, 150, 255), 1.0f);
+    g.DrawPath(&applyBorder, &btnApplyPath);
+    Font fontBold(L"Segoe UI", 9.0f, FontStyleBold);
+    g.DrawString(L"Apply", -1, &fontBold,
+        RectF((REAL)btnPickerApply.left, (REAL)btnPickerApply.top, (REAL)(btnPickerApply.right - btnPickerApply.left), (REAL)(btnPickerApply.bottom - btnPickerApply.top)),
+        &fmtCenter, &textWhite);
 }
 
 void DrawCustomUI(Graphics& g) {
@@ -239,7 +473,7 @@ void DrawCustomUI(Graphics& g) {
     SolidBrush brushBadge(Color(255, GetRValue(g_config.badgeColor), GetGValue(g_config.badgeColor), GetBValue(g_config.badgeColor)));
     g.FillPath(&brushBadge, &cBadgePath);
     g.DrawPath(&borderPen, &cBadgePath);
-    g.DrawString(L"Click color box to change", -1, &fontSmall, PointF(65, 435), &textDim);
+    g.DrawString(L"Click color box to customize", -1, &fontSmall, PointF(65, 435), &textDim);
 
     g.DrawLine(&sepPen, 20, 470, 320, 470);
 
@@ -309,8 +543,12 @@ void DrawCustomUI(Graphics& g) {
 
         g.ResetClip();
     }
+
+    // 10. Draw Color Picker Modal on top if open
+    DrawColorPickerModal(g);
 }
 
+// Window Procedure
 LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_ERASEBKGND:
@@ -330,6 +568,15 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
             InvalidateRect(hwnd, NULL, FALSE);
         }
         return 0;
+    }
+
+    case WM_KEYDOWN: {
+        if (wParam == VK_ESCAPE && s_pickerOpen) {
+            CancelColorPicker();
+            InvalidateRect(hwnd, NULL, FALSE);
+            return 0;
+        }
+        break;
     }
 
     case WM_PAINT: {
@@ -365,6 +612,51 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
     case WM_LBUTTONDOWN: {
         int x = (int)(LOWORD(lParam) / g_uiScale), y = (int)(HIWORD(lParam) / g_uiScale);
 
+        // Intercept inputs when Modern Color Picker is open
+        if (s_pickerOpen) {
+            if (!PtInRectCust(pickerCard, x, y)) {
+                CancelColorPicker();
+                InvalidateRect(hwnd, NULL, FALSE);
+                return 0;
+            }
+
+            if (PtInRectCust(btnPickerClose, x, y) || PtInRectCust(btnPickerCancel, x, y)) {
+                CancelColorPicker();
+                InvalidateRect(hwnd, NULL, FALSE);
+                return 0;
+            }
+
+            if (PtInRectCust(btnPickerApply, x, y)) {
+                ApplyColorPicker();
+                InvalidateRect(hwnd, NULL, FALSE);
+                return 0;
+            }
+
+            // Check swatches
+            for (int i = 0; i < 16; ++i) {
+                RECT r = GetPaletteSwatchRect(i);
+                if (PtInRectCust(r, x, y)) {
+                    s_pickerColor = s_paletteColors[i];
+                    COLORREF* p = GetTargetColorPtr(s_pickerTarget);
+                    if (p) *p = s_pickerColor; // Live preview
+                    InvalidateRect(hwnd, NULL, FALSE);
+                    return 0;
+                }
+            }
+
+            // Check RGB Sliders
+            if (PtInRectCust(rectTrackR, x, y)) s_pickerDraggingSlider = 1;
+            else if (PtInRectCust(rectTrackG, x, y)) s_pickerDraggingSlider = 2;
+            else if (PtInRectCust(rectTrackB, x, y)) s_pickerDraggingSlider = 3;
+
+            if (s_pickerDraggingSlider != 0) {
+                SetCapture(hwnd);
+                SendMessage(hwnd, WM_MOUSEMOVE, wParam, lParam);
+            }
+            return 0;
+        }
+
+        // Standard settings clicks
         if (PtInRectCust(btnBind, x, y)) {
             g_bindingMode = BindingMode::TriggerKey;
             InvalidateRect(hwnd, NULL, FALSE);
@@ -394,22 +686,21 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
             s_targetHeight = g_shortcutsExpanded ? 725.0f : 555.0f;
             SetTimer(hwnd, 99, 14, NULL);
         }
-        else if (PtInRectCust(colorLine, x, y) || PtInRectCust(colorArrow, x, y) || PtInRectCust(colorRect, x, y) || PtInRectCust(colorBadge, x, y)) {
-            COLORREF* pTargetColor = nullptr;
-            if (PtInRectCust(colorLine, x, y)) pTargetColor = &g_config.lineColor;
-            else if (PtInRectCust(colorArrow, x, y)) pTargetColor = &g_config.arrowColor;
-            else if (PtInRectCust(colorRect, x, y)) pTargetColor = &g_config.rectColor;
-            else if (PtInRectCust(colorBadge, x, y)) pTargetColor = &g_config.badgeColor;
-
-            if (!pTargetColor) return 0;
-
-            COLORREF customColors[16] = { 0 };
-            CHOOSECOLOR cc = { sizeof(CHOOSECOLOR), hwnd, NULL, *pTargetColor, customColors, CC_RGBINIT | CC_FULLOPEN };
-            if (ChooseColor(&cc)) {
-                *pTargetColor = cc.rgbResult;
-                SaveConfig();
-                InvalidateRect(hwnd, NULL, FALSE);
-            }
+        else if (PtInRectCust(colorLine, x, y)) {
+            OpenColorPicker(ColorPickerTarget::Line);
+            InvalidateRect(hwnd, NULL, FALSE);
+        }
+        else if (PtInRectCust(colorArrow, x, y)) {
+            OpenColorPicker(ColorPickerTarget::Arrow);
+            InvalidateRect(hwnd, NULL, FALSE);
+        }
+        else if (PtInRectCust(colorRect, x, y)) {
+            OpenColorPicker(ColorPickerTarget::Rect);
+            InvalidateRect(hwnd, NULL, FALSE);
+        }
+        else if (PtInRectCust(colorBadge, x, y)) {
+            OpenColorPicker(ColorPickerTarget::Badge);
+            InvalidateRect(hwnd, NULL, FALSE);
         }
         else if (PtInRectCust(rectSliderLine, x, y)) { draggingSlider = 1; SetCapture(hwnd); }
         else if (PtInRectCust(rectSliderArrow, x, y)) { draggingSlider = 2; SetCapture(hwnd); }
@@ -419,8 +710,33 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         return 0;
     }
     case WM_MOUSEMOVE: {
+        int x = (int)(LOWORD(lParam) / g_uiScale);
+
+        if (s_pickerOpen) {
+            if (s_pickerDraggingSlider != 0 && (wParam & MK_LBUTTON)) {
+                float percent = (float)(x - rectTrackR.left) / (float)(rectTrackR.right - rectTrackR.left);
+                if (percent < 0.0f) percent = 0.0f;
+                if (percent > 1.0f) percent = 1.0f;
+                int val = (int)(percent * 255.0f + 0.5f);
+
+                int r = GetRValue(s_pickerColor);
+                int g = GetGValue(s_pickerColor);
+                int b = GetBValue(s_pickerColor);
+
+                if (s_pickerDraggingSlider == 1) r = val;
+                else if (s_pickerDraggingSlider == 2) g = val;
+                else if (s_pickerDraggingSlider == 3) b = val;
+
+                s_pickerColor = RGB(r, g, b);
+                COLORREF* pTarget = GetTargetColorPtr(s_pickerTarget);
+                if (pTarget) *pTarget = s_pickerColor; // Live preview
+
+                InvalidateRect(hwnd, NULL, FALSE);
+            }
+            return 0;
+        }
+
         if (draggingSlider != 0 && (wParam & MK_LBUTTON)) {
-            int x = (int)(LOWORD(lParam) / g_uiScale);
             float percent = (float)(x - (int)rectSliderLine.left) / (float)(rectSliderLine.right - rectSliderLine.left);
             if (percent < 0.0f) percent = 0.0f;
             if (percent > 1.0f) percent = 1.0f;
@@ -436,6 +752,10 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         return 0;
     }
     case WM_LBUTTONUP:
+        if (s_pickerDraggingSlider != 0) {
+            ReleaseCapture();
+            s_pickerDraggingSlider = 0;
+        }
         if (draggingSlider != 0) {
             ReleaseCapture();
             draggingSlider = 0;
@@ -443,6 +763,9 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         return 0;
 
     case WM_CLOSE:
+        if (s_pickerOpen) {
+            CancelColorPicker();
+        }
         DestroyWindow(hwnd);
         return 0;
 
@@ -450,6 +773,7 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         KillTimer(hwnd, 99);
         g_hwndSettings = NULL;
         g_bindingMode = BindingMode::None;
+        s_pickerOpen = false;
         return 0;
     }
     return DefWindowProc(hwnd, msg, wParam, lParam);

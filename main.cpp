@@ -82,7 +82,6 @@ int APIENTRY WinMain(
     (void)lpCmdLine;
     (void)nCmdShow;
 
-    // --- ПРОВЕРКА И ЗАКРЫТИЕ СТАРОГО ЭКЗЕМПЛЯРА ---
     HWND hExisting = FindWindowW(L"LensItOverlay", NULL);
     if (hExisting) {
         DWORD oldPid = 0;

@@ -102,12 +102,6 @@ All changes are saved automatically to `config.ini`.
 - Windows 10/11
 - Visual Studio 2022 (or newer) with the **Desktop development with C++** workload
 
-**Steps:**
-1. Clone the repository
-2. Open `AkwaLens.vcxproj` in Visual Studio
-3. Select the `Release` configuration (`x64` recommended)
-4. Build (`Ctrl+Shift+B`)
-
 The project links against `magnification.lib`, `gdiplus.lib`, `dwmapi.lib`, `shlwapi.lib` and other standard Windows libraries — no external dependencies required.
 
 ## 🧩 Tech stack
@@ -220,12 +214,6 @@ The project links against `magnification.lib`, `gdiplus.lib`, `dwmapi.lib`, `shl
 **Требования:**
 - Windows 10/11
 - Visual Studio 2022 (или новее) с компонентом **Разработка классических приложений на C++**
-
-**Шаги:**
-1. Склонируй репозиторий
-2. Открой `AkwaLens.vcxproj` в Visual Studio
-3. Выбери конфигурацию `Release` (рекомендуется `x64`)
-4. Собери проект (`Ctrl+Shift+B`)
 
 Проект использует `magnification.lib`, `gdiplus.lib`, `dwmapi.lib`, `shlwapi.lib` и другие стандартные библиотеки Windows — внешние зависимости не требуются.
 

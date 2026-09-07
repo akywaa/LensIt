@@ -5,9 +5,9 @@
 
 # LensIt
 
-**A tiny screen magnifier, annotation tool and break timer for Windows.**
+**A tiny, instant screen magnifier, on-screen annotation tool, and break timer for Windows.**
 
-Hold a key and scroll to zoom in on anything, draw lines, arrows and rectangles, drop numbered step badges, blur out sensitive data, or pop up a countdown timer over your screen. Useful for presentations, tutorials, streams, lectures, bug reports, whatever needs pointing at.
+Hold a key, scroll to zoom in on anything, draw lines, arrows, rectangles, badges, blur out sensitive data, or launch a sleek countdown break timer right over your screen — perfect for presentations, tutorials, streams, lectures, or bug reporting.
 
 [Features](#-features) • [Usage](#-usage) • [Break Timer](#-break-countdown-timer) • [Settings](#-settings) • [Installation](#-installation) • [Building from source](#-building-from-source) • [Русская версия](#-lensit-русская-версия)
 
@@ -17,24 +17,24 @@ Hold a key and scroll to zoom in on anything, draw lines, arrows and rectangles,
 
 ## ✨ Features
 
-- Single executable, under 1 MB
-- Around 15 MB of RAM
-- 0% CPU when idle
-- No dependencies, runs on a clean Windows 10 or 11 install
+- 🪶 < 1 MB single standalone executable
+- ⚡ ~15 MB RAM consumption
+- 🚀 0% CPU idle usage
+- 📦 Zero dependencies — runs out-of-the-box on clean Windows 10 & 11
 
-- **Instant magnifier** — hold the trigger key and scroll to zoom smoothly on the cursor
-- **Annotation tools** — freehand lines, arrows, rectangles
-- **Step badges** — numbered markers (1, 2, 3...) that auto-increment, handy for walking someone through steps
-- **Highlighter** — translucent marker for text and UI elements
-- **Blackout blur** — cover up passwords, tokens, API keys, anything you don't want on screen
-- **Break countdown timer** — translucent fullscreen timer with mouse-wheel scrubbing and manual time entry
-- **Pin mode** — keep drawings on screen as a click-through overlay instead of clearing them
-- **Quick color palette** — swap ink color on the fly with `R`/`G`/`B`/`Y`
-- **One-key screenshot** — copies the annotated view straight to your clipboard
-- **Toast HUD** — small on-screen notices when you switch modes or colors
-- Fully customizable trigger key, modifier key, colors and stroke widths
-- Lives in the tray, no taskbar clutter
-- Settings are saved automatically to a local `config.ini` next to the exe
+- 🔍 **Instant magnifier** — hold your trigger key and scroll the mouse wheel to zoom smoothly in on the cursor
+- ✏️ **Rich annotation tools** — draw smooth freehand lines, directional arrows, and rectangles
+- 🔢 **Step badges** — drop auto-incrementing numbered markers (1, 2, 3...) to guide attention step by step
+- 🖍️ **Highlighter mode** — translucent marker tool to emphasize text and UI elements
+- 🔲 **Blackout Blur** — quickly obscure passwords, tokens, API keys, or sensitive UI details
+- ⏳ **Break Countdown Timer** — modern translucent fullscreen timer for presentation breaks with minute/second scrubbing and direct time entry
+- 📌 **Pin Mode (Persistent drawings)** — keep annotations visible on screen as an interactive click-through overlay
+- 🎨 **Quick color palette** — switch ink colors instantly on the fly (`R`/`G`/`B`/`Y`)
+- 📋 **One-key screenshot** — copy your annotated view straight to the clipboard
+- 🔔 **Subtle Toast HUD** — minimal on-screen notifications for mode toggles, color changes, and actions
+- 🎛️ **Fully customizable** — pick your own trigger key, modifier key, colors, and stroke widths for every tool
+- 🧷 **Lives in the tray** — no taskbar clutter, right-click the tray icon for settings or to exit
+- 💾 **Persistent config** — all your settings are saved to a local `config.ini` next to the executable
 
 ## 🕹 Usage
 
@@ -56,59 +56,60 @@ Hold a key and scroll to zoom in on anything, draw lines, arrows and rectangles,
 | Open settings / Exit | Right-click the tray icon |
 
 > [!TIP]
-> By default, releasing the trigger key clears unpinned drawings. You can toggle "Keep drawings on screen" or turn on "Reset zoom on release" in settings if you want different behavior.
+> By default, releasing the trigger key clears unpinned drawings. You can toggle **"Keep drawings on screen"** or enable **"Reset zoom on release"** in the settings.
 
 > [!WARNING]
-> **Note for gamers:** LensIt overlays the screen and hooks into system-wide magnification, so it won't work over apps running in true exclusive fullscreen (Geometry Dash, Counter-Strike 2, and a lot of other games behave this way).
-> If you want to use LensIt with a game like that, switch its display mode to Borderless / Windowed Borderless, or plain Windowed, in the game's video settings.
+> **A note for gamers:** LensIt overlays the screen and hooks system-wide magnification, which does **not** work over applications running in true **exclusive fullscreen** mode (e.g. *Geometry Dash*, *Counter-Strike 2*, and many other games).
+> To use LensIt with these, switch the game's display mode to **Borderless / Windowed Borderless** (or plain Windowed) instead of Fullscreen — this is usually found in the game's video/graphics settings.
 
 ## ⏳ Break Countdown Timer
 
-Need a 5-minute break, or want to give people time for an exercise during a webinar, lecture or stream? Press **`[Trigger] + T`** and you get a translucent backdrop with a countdown clock and progress bar.
+Need a 5-minute break or want to give the audience time for an exercise during a webinar, lecture, or stream? 
 
-- **Adjust by minutes:** scroll the wheel (or `↑` / `↓`)
-- **Adjust by seconds:** hold `Shift` while scrolling (or `Shift + ↑` / `Shift + ↓`) for ±5 second steps
-- **Type an exact time:** click the clock, type something like `3:50`, `10` or `:45`, hit `Enter`
-- **Pause / resume:** `Space`
-- **Dismiss:** `Esc` (or `[Trigger] + T` again)
-- When it hits zero you get a quiet chime and a toast notification
+Press **`[Trigger] + T`** to bring up a modern translucent backdrop with a smooth countdown clock and progress bar:
+- **Adjust by Minutes:** Scroll the mouse wheel (or press `↑` / `↓`)
+- **Adjust by Seconds:** Hold `Shift` while scrolling (or `Shift + ↑` / `Shift + ↓`) to step by $\pm 5$ seconds
+- **Click to Enter Custom Time:** Click directly on the clock to type any exact time (e.g. `3:50`, `10`, `:45`), then hit `Enter`
+- **Pause / Resume:** Press `Space`
+- **Dismiss / Exit:** Press `Esc` (or `[Trigger] + T`)
+- **Alarm:** Plays a subtle system chime and displays a toast notification when the timer expires
 
 ## ⚙️ Settings
 
-Right-click the tray icon and open **Settings** to configure:
+Right-click the tray icon → **Settings** to open the settings panel, where you can configure:
 
-- **Trigger Key** — which key or mouse button (including X1/X2/Middle) activates zoom and drawing
-- **Reset zoom on trigger release** — snap back to 1x when you let go
-- **Keep drawings on screen** — make drawings persist and stay click-through after release
-- **Line / Arrow / Rectangle** — color and width for each tool separately
-- **Rectangle Modifier Key** — the extra key held with the trigger to draw rectangles
-- **Step Badge Color**
-- A shortcuts drawer with the full hotkey list, in case you forget one
+- **Trigger Key** — the key or mouse button (X1/X2/Middle) you hold to activate zoom & drawing mode
+- **Reset zoom on trigger release** — automatically snap back to 1x zoom when letting go of the trigger
+- **Keep drawings on screen** — make your drawings persist and remain click-through after releasing the trigger
+- **Line / Arrow / Rectangle** — individual color pickers and width sliders for every tool
+- **Rectangle Modifier Key** — the extra key held together with the trigger key to draw rectangles
+- **Step Badge Color** — customizable color for numbered step indicators
+- **Shortcuts & Hotkeys Drawer** — an interactive expandable cheat sheet showing all built-in hotkeys
 
-Everything saves automatically to `config.ini`.
+All changes are saved automatically to `config.ini`.
 
 ## 📥 Installation
 
 1. Go to the [Releases](../../releases) page
-2. Grab the latest `AkwaLens.exe` (also shows up as `LensIt.exe`)
-3. Run it. No installer, no setup wizard.
+2. Download the latest `LensIt.exe`
+3. Run it — that's it, no installer needed
 
-On first launch you'll get a small welcome dialog offering to enable startup with Windows and create a desktop shortcut, both optional. To remove it, just delete the `.exe` and, if one was created, `config.ini`.
+> LensIt is a portable, single-file executable. On first launch, a welcome dialog helps you optionally configure automatic Windows startup and create a desktop shortcut. To uninstall, simply delete the `.exe` (and the generated `config.ini`, if any).
 
 ## 🛠 Building from source
 
 **Requirements:**
 - Windows 10/11
-- Visual Studio 2022 or newer, with the "Desktop development with C++" workload
+- Visual Studio 2022 (or newer) with the **Desktop development with C++** workload
 
-It links against `magnification.lib`, `gdiplus.lib`, `dwmapi.lib`, `shlwapi.lib` and other standard Windows libraries. Nothing external to install.
+The project links against `magnification.lib`, `gdiplus.lib`, `dwmapi.lib`, `shlwapi.lib` and other standard Windows libraries — no external dependencies required.
 
 ## 🧩 Tech stack
 
-- C++ with the native Win32 API
-- Windows Magnification API for hardware-accelerated zoom
-- GDI+ for the annotations, blur baking, timer HUD and dark UI
-- Low-level keyboard/mouse hooks for global input capture
+- **C++** with the native Win32 API
+- **Windows Magnification API** for high-performance hardware-accelerated zoom
+- **GDI+** for rendering smooth anti-aliased annotations, blur baking, break timer HUD, and dark-themed UI
+- **Low-level keyboard & mouse hooks** for global input capture
 
 ---
 ---
@@ -117,9 +118,9 @@ It links against `magnification.lib`, `gdiplus.lib`, `dwmapi.lib`, `shlwapi.lib`
 
 # 🔎 LensIt — русская версия
 
-**Компактная лупа для экрана с инструментами аннотаций и таймером перерыва для Windows.**
+**Компактная лупа для экрана с инструментами аннотаций и стильным таймером перерыва для Windows.**
 
-Зажимаешь клавишу, крутишь колесо мыши — приближаешь нужную область. Можно рисовать линии, стрелки, прямоугольники, ставить шаги, размывать конфиденциальные данные или запускать таймер перерыва прямо поверх экрана. Пригодится для презентаций, обучающих видео, лекций, стримов, баг-репортов.
+Зажми клавишу, крути колесо мыши, чтобы приблизить нужную область, рисуй линии, стрелки, прямоугольники, расставляй шаги, размывай конфиденциальные данные или запускай таймер перерыва прямо на экране — идеально для презентаций, обучающих видео, лекций, стримов и баг-репортов.
 
 [Возможности](#-возможности) • [Использование](#-использование) • [Таймер перерыва](#-таймер-перерыва-break-timer) • [Настройки](#-настройки) • [Установка](#-установка) • [Сборка из исходников](#-сборка-из-исходников)
 
@@ -129,24 +130,24 @@ It links against `magnification.lib`, `gdiplus.lib`, `dwmapi.lib`, `shlwapi.lib`
 
 ## ✨ Возможности
 
-- Один exe-файл, меньше 1 МБ
-- Около 15 МБ ОЗУ
-- 0% процессора в простое
-- Никаких зависимостей, работает на чистой Windows 10 и 11
+- 🪶 Один исполняемый файл размером < 1 МБ
+- ⚡ ~15 МБ потребления ОЗУ
+- 🚀 0% загрузки процессора в простое
+- 📦 Никаких зависимостей — работает "из коробки" на чистой Windows 10 и 11
 
-- **Мгновенная лупа** — зажми клавишу-триггер и крути колесо, чтобы плавно приблизить область вокруг курсора
-- **Аннотации** — линии, стрелки, прямоугольники от руки
-- **Бейджи шагов** — нумерованные маркеры (1, 2, 3...) с автоинкрементом, удобно, когда нужно провести кого-то по шагам
-- **Маркер (Highlighter)** — полупрозрачное выделение текста и элементов интерфейса
-- **Размытие (Blur)** — скрыть пароли, токены, ключи и всё, что не должно светиться на экране
-- **Таймер перерыва** — полупрозрачный полноэкранный таймер с настройкой колесом мыши и вводом времени вручную
-- **Pin Mode** — рисунки остаются на экране как сквозной для кликов слой, вместо того чтобы сразу пропадать
-- **Быстрая смена цвета** — `R`/`G`/`B`/`Y` прямо на лету
-- **Скриншот в один клик** — аннотированный вид сразу в буфер обмена
-- **Toast-уведомления** — небольшие подсказки при переключении режимов и цветов
-- Полностью настраиваемые клавиша-триггер, модификатор, цвета и толщина линий
-- Живёт в трее, не занимает панель задач
-- Настройки сохраняются автоматически в `config.ini` рядом с exe
+- 🔍 **Мгновенная лупа** — зажми клавишу-триггер и крути колесо мыши, чтобы плавно приблизить область вокруг курсора
+- ✏️ **Набор для аннотаций** — рисуй плавные произвольные линии, стрелки и прямоугольники
+- 🔢 **Бейджи шагов** — расставляй круглые маркеры с автоматической нумерацией (1, 2, 3...), чтобы вести зрителя по шагам
+- 🖍️ **Режим маркера (Highlighter)** — полупрозрачное выделение текста и ключевых элементов
+- 🔲 **Размытие и цензура (Blur)** — быстрое скрытие паролей, токенов, ключей и личных данных
+- ⏳ **Таймер перерыва (Break Timer)** — эстетичный экран обратного отсчёта для перерывов на лекциях с пошаговой настройкой секунд и ручным вводом времени
+- 📌 **Закрепление рисунков (Pin Mode)** — сохранение аннотаций на экране в виде прозрачного для кликов слоя
+- 🎨 **Быстрая смена цветов** — мгновенное переключение цвета чернил на лету (`R`/`G`/`B`/`Y`)
+- 📋 **Скриншот в буфер обмена** — копирование экрана вместе со всеми рисунками в один клик
+- 🔔 **Всплывающие Toast-уведомления** — аккуратный анимированный HUD с информацией о режимах и действиях
+- 🎛️ **Полная настройка** — выбери свою клавишу-триггер, модификатор, цвета и толщину для каждого инструмента
+- 🧷 **Работает из трея** — не занимает панель задач, все настройки и выход — через иконку в трее
+- 💾 **Сохранение настроек** — все параметры сохраняются в локальный `config.ini` рядом с исполняемым файлом
 
 ## 🕹 Использование
 
@@ -156,68 +157,69 @@ It links against `magnification.lib`, `gdiplus.lib`, `dwmapi.lib`, `shlwapi.lib`
 | Нарисовать линию | Зажать **клавишу-триггер** + ЛКМ |
 | Нарисовать стрелку | Зажать **клавишу-триггер** + ПКМ |
 | Нарисовать прямоугольник | Зажать **клавишу-триггер** + **клавишу для прямоугольника** (по умолчанию `Shift`) + ЛКМ |
-| Поставить бейдж шага (1, 2, 3...) | Зажать **клавишу-триггер** + СКМ |
-| Включить/выключить маркер | Зажать **клавишу-триггер** + `H` |
-| Включить/выключить размытие | Зажать **клавишу-триггер** + `O` |
-| **Включить/выключить таймер перерыва** | Зажать **клавишу-триггер** + `T` |
-| Быстрая смена цвета | Зажать **клавишу-триггер** + `R` (красный) / `G` (зелёный) / `B` (синий) / `Y` (жёлтый) |
+| Поставить бейдж шага (1, 2, 3...) | Зажать **клавишу-триггер** + СКМ (клик колесом мыши) |
+| Включить / выключить маркер | Зажать **клавишу-триггер** + `H` |
+| Включить / выключить размытие (блюр) | Зажать **клавишу-триггер** + `O` |
+| **Включить / выключить таймер перерыва** | Зажать **клавишу-триггер** + `T` |
+| Быстро сменить цвет | Зажать **клавишу-триггер** + `R` (красный) / `G` (зеленый) / `B` (синий) / `Y` (желтый) |
 | Отменить последнее действие | Зажать **клавишу-триггер** + `Z` |
 | Скопировать скриншот с рисунками | Зажать **клавишу-триггер** + `C` |
 | Закрепить рисунки на экране | Зажать **клавишу-триггер** + `P` |
 | Сбросить приближение и рисунки | `Esc` |
-| Открыть настройки / выйти | ПКМ по иконке в трее |
+| Открыть настройки / Выйти | ПКМ по иконке в трее |
 
 > [!TIP]
-> По умолчанию при отпускании клавиши-триггера незакреплённые рисунки исчезают. Это можно поменять через "Keep drawings on screen" или включить "Reset zoom on release" в настройках.
+> По умолчанию при отпускании клавиши-триггера рисунки очищаются. Вы можете закрепить их клавишей `P` (или через настройку **"Keep drawings on screen"**), а также включить автоматический сброс приближения при отпускании клавиши.
 
 > [!WARNING]
-> **Для геймеров:** LensIt накладывается поверх экрана и цепляется к системному масштабированию, поэтому не работает поверх игр в настоящем exclusive fullscreen режиме (Geometry Dash, Counter-Strike 2 и многие другие так себя ведут).
-> Чтобы LensIt заработал, переключи игру на Borderless / Windowed Borderless или обычный оконный режим в настройках графики.
+> **Примечание для геймеров:** LensIt накладывается поверх экрана и использует системное приближение, которое **не работает** поверх приложений, запущенных в настоящем **полноэкранном (exclusive fullscreen) режиме** (например, *Geometry Dash*, *Counter-Strike 2* и многие другие игры).
+> Чтобы LensIt работал с такими играми, переключи режим экрана игры на **оконный без рамки (Borderless / Windowed Borderless)** или обычный оконный режим вместо полноэкранного — это обычно находится в настройках видео/графики игры.
 
 ## ⏳ Таймер перерыва (Break Timer)
 
-Нужен 5-минутный перерыв или время на задание во время созвона, вебинара или стрима? Нажми **`[Триггер] + T`** — экран затемнится, появится крупный таймер с прогресс-баром.
+Нужно объявить 5-минутный перерыв или дать аудитории время на выполнение задания во время созвона, вебинара или стрима?
 
-- **По минутам:** колесо мыши (или `↑` / `↓`)
-- **По секундам:** `Shift` + колесо (или `Shift + ↑` / `Shift + ↓`), шаг ±5 секунд
-- **Ввести точное время:** кликни по цифрам, введи что-то вроде `3:50`, `10` или `:45`, нажми `Enter`
-- **Пауза/продолжить:** `Пробел`
-- **Закрыть:** `Esc` (или снова `[Триггер] + T`)
-- По окончании — тихий системный сигнал и toast-уведомление
+Нажмите **`[Триггер] + T`**, чтобы затемнить экран стильным полупрозрачным фоном с крупным таймером и прогресс-баром:
+- **Регулировка по минутам:** крутите колесо мыши (или клавиши `↑` / `↓`)
+- **Регулировка по секундам:** зажмите `Shift` и крутите колесо (или `Shift + ↑` / `Shift + ↓`) для шага $\pm 5$ секунд
+- **Ручной ввод времени:** кликните ЛКМ прямо по цифрам времени, введите с клавиатуры нужное значение (например, `3:50`, `10` или `:45`) и нажмите `Enter`
+- **Пауза / Продолжить:** нажмите `Пробел`
+- **Закрыть таймер:** нажмите `Esc` (или снова `[Триггер] + T`)
+- **Окончание времени:** мягкий звуковой сигнал системы и Toast-уведомление об окончании перерыва
 
 ## ⚙️ Настройки
 
-ПКМ по иконке в трее → **Settings**, там можно настроить:
+ПКМ по иконке в трее → **Settings**, чтобы открыть панель настроек, где можно изменить:
 
-- **Trigger Key** — клавишу или кнопку мыши (включая X1/X2/среднюю), которая активирует режим
-- **Reset zoom on trigger release** — сброс приближения при отпускании
-- **Keep drawings on screen** — рисунки остаются на экране и сквозными для кликов после отпускания
-- **Line / Arrow / Rectangle** — цвет и толщина отдельно для каждого инструмента
-- **Rectangle Modifier Key** — дополнительная клавиша для прямоугольников
-- **Step Badge Color**
-- Шпаргалка по горячим клавишам прямо в настройках, если что-то забудешь
+- **Trigger Key** — клавиша или кнопка мыши (боковые кнопки X1/X2, колесико), которую нужно зажимать для активации
+- **Reset zoom on trigger release** — автоматический сброс приближения до 1x при отпускании триггера
+- **Keep drawings on screen** — сохранять рисунки на экране после отпускания клавиши (сквозной оверлей)
+- **Line / Arrow / Rectangle** — раздельный выбор цвета и ползунки толщины для каждого инструмента
+- **Rectangle Modifier Key** — клавиша для рисования прямоугольников
+- **Step Badge Color** — выбор цвета для нумерованных маркеров
+- **Shortcuts & Hotkeys** — встроенная раскрывающаяся карточка-шпаргалка со всеми горячими клавишами
 
-Все изменения сохраняются в `config.ini` автоматически.
+Все изменения сохраняются автоматически в `config.ini`.
 
 ## 📥 Установка
 
-1. Открой страницу [Releases](../../releases)
-2. Скачай последний `AkwaLens.exe` (он же `LensIt.exe`)
-3. Запусти. Установщика нет.
+1. Перейди на страницу [Releases](../../releases)
+2. Скачай последнюю версию `LensIt.exe`
+3. Запусти — установка не требуется
 
-При первом запуске появится окошко с предложением включить автозапуск и создать ярлык на рабочем столе — оба пункта опциональны. Чтобы удалить программу, просто сотри `.exe`, а заодно и `config.ini`, если он успел создаться.
+> LensIt — портативный исполняемый файл. При первом запуске появится стартовое окно с возможностью включить автозапуск с Windows и создать ярлык на рабочем столе. Чтобы удалить программу, просто удали `.exe` (и файл `config.ini`, если он создался).
 
 ## 🛠 Сборка из исходников
 
 **Требования:**
 - Windows 10/11
-- Visual Studio 2022 или новее, с компонентом "Разработка классических приложений на C++"
+- Visual Studio 2022 (или новее) с компонентом **Разработка классических приложений на C++**
 
-Проект линкуется с `magnification.lib`, `gdiplus.lib`, `dwmapi.lib`, `shlwapi.lib` и другими стандартными библиотеками Windows. Ставить ничего лишнего не нужно.
+Проект использует `magnification.lib`, `gdiplus.lib`, `dwmapi.lib`, `shlwapi.lib` и другие стандартные библиотеки Windows — внешние зависимости не требуются.
 
 ## 🧩 Технологии
 
-- C++ на нативном Win32 API
-- Windows Magnification API для аппаратного масштабирования
-- GDI+ для аннотаций, размытия, графики таймера и интерфейса
-- Низкоуровневые хуки клавиатуры и мыши для глобального перехвата ввода
+- **C++** с нативным Win32 API
+- **Windows Magnification API** для плавного аппаратного масштабирования экрана
+- **GDI+** для сглаженной отрисовки аннотаций, генерации размытия, графики таймера и интерфейса настроек
+- **Низкоуровневые хуки клавиатуры и мыши** для глобального перехвата ввода

@@ -147,23 +147,24 @@ void ShowSettingsWindow(HINSTANCE hInstance) {
         return;
     }
 
-    UINT dpi = GetDpiForSystem();
-    g_uiScale = (dpi > 0) ? ((float)dpi / 96.0f) : 1.0f;
-
-    s_animHeight = s_targetHeight = g_shortcutsExpanded ? 725.0f : 555.0f;
-    RECT wr = { 0, 0, (int)(340 * g_uiScale), (int)(s_animHeight * g_uiScale) };
-    AdjustWindowRectEx(&wr, WS_POPUP | WS_CAPTION | WS_SYSMENU, FALSE, WS_EX_TOPMOST);
-    int w = wr.right - wr.left;
-    int h = wr.bottom - wr.top;
-
-    int cx = (GetSystemMetrics(SM_CXSCREEN) - w) / 2;
-    int cy = (GetSystemMetrics(SM_CYSCREEN) - h) / 2;
+    s_animHeight = s_targetHeight = g_shortcutsExpanded ? 785.0f : 555.0f;
 
     g_hwndSettings = CreateWindowEx(
         WS_EX_TOPMOST, L"LensItSettings", L"LensIt Settings",
         WS_POPUP | WS_CAPTION | WS_SYSMENU,
-        cx, cy, w, h, NULL, NULL, hInstance, NULL
+        0, 0, 340, (int)s_animHeight, NULL, NULL, hInstance, NULL
     );
+
+    UINT dpi = GetDpiForWindow(g_hwndSettings);
+    g_uiScale = (dpi > 0) ? ((float)dpi / 96.0f) : 1.0f;
+
+    RECT wr = { 0, 0, (int)(340 * g_uiScale), (int)(s_animHeight * g_uiScale) };
+    AdjustWindowRectEx(&wr, WS_POPUP | WS_CAPTION | WS_SYSMENU, FALSE, WS_EX_TOPMOST);
+    int w = wr.right - wr.left;
+    int h = wr.bottom - wr.top;
+    int cx = (GetSystemMetrics(SM_CXSCREEN) - w) / 2;
+    int cy = (GetSystemMetrics(SM_CYSCREEN) - h) / 2;
+    SetWindowPos(g_hwndSettings, NULL, cx, cy, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
 
     BOOL dark = TRUE;
     DwmSetWindowAttribute(g_hwndSettings, 20, &dark, sizeof(dark));
@@ -510,7 +511,7 @@ void DrawCustomUI(Graphics& g) {
         &fmtNear, &textBrush);
 
     float startY = 520.0f;
-    float maxCardHeight = 188.0f;
+    float maxCardHeight = 244.0f;
     float visibleHeight = s_animHeight - startY - 14.0f;
 
     if ((g_shortcutsExpanded || s_animHeight > 555.0f) && visibleHeight > 10.0f) {
@@ -532,12 +533,19 @@ void DrawCustomUI(Graphics& g) {
             L"[Trigger] + RMB       : Draw Arrow\n"
             L"[Trigger] + Shift+LMB : Draw Rectangle\n"
             L"[Trigger] + O / H     : Blackout / Highlighter\n"
+            L"[Trigger] + V         : Laser Ink (vanishing)\n"
+            L"[Trigger] + X         : Text on screen (Enter = commit)\n"
+            L"[Trigger] + S         : Spotlight dimmer\n"
+            L"[Trigger] + W         : Whiteboard (W again = dark, off)\n"
             L"[Trigger] + T         : Break Timer\n"
             L"  * Wheel / Shift+Wh  : +/- min / sec\n"
             L"  * Click clock to edit time directly\n"
             L"[Trigger] + MMB       : Step Badge (1, 2, 3..)\n"
             L"[Trigger] + P         : Pin drawings on screen\n"
-            L"[Trigger] + Z / C     : Undo / Screenshot";
+            L"[Trigger] + Z / C     : Undo / Screenshot\n"
+            L"[Trigger] + Shift+C   : Crop screenshot (drag area)\n"
+            L"[Trigger] + Shift+drag: Snap line/arrow 0/45/90\n"
+            L"[Trigger] + K         : Keystroke HUD on/off";
 
         g.DrawString(shortcutsInfo.c_str(), -1, &fontCode, PointF(28, startY + 8.0f), &textDim);
 
@@ -553,6 +561,21 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
     switch (msg) {
     case WM_ERASEBKGND:
         return 1;
+
+    case WM_ACTIVATE:
+        if (LOWORD(wParam) == WA_INACTIVE) {
+            if (g_bindingMode != BindingMode::None) {
+                g_bindingMode = BindingMode::None;
+                InvalidateRect(hwnd, NULL, FALSE);
+            }
+            if (draggingSlider != 0 || s_pickerDraggingSlider != 0) {
+                ReleaseCapture();
+                if (draggingSlider != 0) SaveConfig();
+                draggingSlider = 0;
+                s_pickerDraggingSlider = 0;
+            }
+        }
+        return 0;
 
     case WM_TIMER: {
         if (wParam == 99) {
@@ -577,6 +600,18 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
             return 0;
         }
         break;
+    }
+
+    case WM_DPICHANGED: {
+        g_uiScale = (float)LOWORD(wParam) / 96.0f;
+        RECT* const prcNewWindow = (RECT*)lParam;
+        SetWindowPos(hwnd, NULL,
+            prcNewWindow->left, prcNewWindow->top,
+            prcNewWindow->right - prcNewWindow->left,
+            prcNewWindow->bottom - prcNewWindow->top,
+            SWP_NOZORDER | SWP_NOACTIVATE);
+        InvalidateRect(hwnd, NULL, FALSE);
+        return 0;
     }
 
     case WM_PAINT: {
@@ -683,7 +718,7 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         }
         else if (PtInRectCust(btnShortcutsHeader, x, y)) {
             g_shortcutsExpanded = !g_shortcutsExpanded;
-            s_targetHeight = g_shortcutsExpanded ? 725.0f : 555.0f;
+            s_targetHeight = g_shortcutsExpanded ? 785.0f : 555.0f;
             SetTimer(hwnd, 99, 14, NULL);
         }
         else if (PtInRectCust(colorLine, x, y)) {
@@ -746,7 +781,6 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
             else if (draggingSlider == 2) g_config.arrowWidth = val;
             else if (draggingSlider == 3) g_config.rectWidth = val;
 
-            SaveConfig();
             InvalidateRect(hwnd, NULL, FALSE);
         }
         return 0;
@@ -759,6 +793,7 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         if (draggingSlider != 0) {
             ReleaseCapture();
             draggingSlider = 0;
+            SaveConfig();
         }
         return 0;
 

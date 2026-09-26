@@ -70,33 +70,3 @@ bool CreateDesktopShortcut() {
     }
     return false;
 }
-
-bool SelfInstallIfNeeded() {
-    PWSTR localAppData = NULL;
-    if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, NULL, &localAppData))) {
-        return false;
-    }
-
-    std::wstring targetDir = std::wstring(localAppData) + L"\\LensIt";
-    std::wstring targetExe = targetDir + L"\\LensIt.exe";
-    CoTaskMemFree(localAppData);
-
-    wchar_t currentExe[MAX_PATH];
-    GetModuleFileNameW(NULL, currentExe, MAX_PATH);
-
-    if (_wcsicmp(currentExe, targetExe.c_str()) == 0) {
-        return false;
-    }
-
-    CreateDirectoryW(targetDir.c_str(), NULL);
-    if (CopyFileW(currentExe, targetExe.c_str(), FALSE)) {
-        STARTUPINFOW si = { sizeof(si) };
-        PROCESS_INFORMATION pi;
-        if (CreateProcessW(targetExe.c_str(), NULL, NULL, NULL, FALSE, 0, NULL, targetDir.c_str(), &si, &pi)) {
-            CloseHandle(pi.hProcess);
-            CloseHandle(pi.hThread);
-            ExitProcess(0);
-        }
-    }
-    return false;
-}

@@ -1,18 +1,12 @@
-/AkwaLens/
-
-/x64/
-/Debug/
-/Release/
+.vs/
+.vscode/
+x64/
+Debug/
+Release/
 [Bb]in/
 [Oo]bj/
 
-.vs/
-.vscode/
-
-*.vcxproj
-*.vcxproj.filters
 *.vcxproj.user
-
 config.ini
 
 *.log

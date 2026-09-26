@@ -6,6 +6,10 @@
 #define WDA_EXCLUDEFROMCAPTURE 0x00000011
 #endif
 
+#ifndef MW_FILTERMODE_EXCLUDE
+#define MW_FILTERMODE_EXCLUDE 0
+#endif
+
 #include <windows.h>
 #include "resource.h"
 #include <magnification.h>
@@ -16,6 +20,7 @@
 #include <dwmapi.h>
 #include <vector>
 #include <string>
+#include <algorithm>
 #include <cmath>
 #include <memory>
 
@@ -30,10 +35,11 @@
 using namespace Gdiplus;
 
 #define WM_APP_TRAYMSG        (WM_APP + 1)
+#define WM_APP_SHOWSETTINGS   (WM_APP + 2)
 #define ID_TRAY_SETTINGS      2001
 #define ID_TRAY_EXIT          2002
 
-enum class StrokeType { Line, Arrow, Rectangle, Badge, Highlight, Blur };
+enum class StrokeType { Line, Arrow, Rectangle, Badge, Highlight, Blur, Text };
 enum class BindingMode { None, TriggerKey, RectKey };
 
 struct Stroke {
@@ -43,6 +49,10 @@ struct Stroke {
     COLORREF color = 0;
     std::shared_ptr<Bitmap> cachedBitmap = nullptr;
     RECT cachedRect = { 0, 0, 0, 0 };
+    float opacity = 1.0f;
+    ULONGLONG birthTick = 0;
+    bool pinned = false;
+    std::wstring text;
 };
 
 struct AppConfig {
@@ -88,7 +98,21 @@ extern bool g_inkOverrideSet;
 extern bool g_persistentDrawingsActive;
 
 enum class ActiveToolMode { None, Highlight, Blur };
+enum class BoardMode { None, White, Dark };
 extern ActiveToolMode g_activeToolMode;
+extern BoardMode g_boardMode;
+extern bool g_cropMode;
+extern bool g_cropDragging;
+extern POINT g_cropStart;
+extern POINT g_cropEnd;
+extern bool g_laserMode;
+extern bool g_spotlightMode;
+extern bool g_keycastEnabled;
+extern bool g_isTextInputActive;
+extern Stroke g_textDraft;
+extern bool g_keycastText;
+extern std::wstring g_keycastTextValue;
+extern ULONGLONG g_keycastUntilTick;
 
 // Break Timer state
 extern bool g_isBreakTimerActive;
@@ -102,6 +126,7 @@ void StartBreakTimer(int minutes = 5);
 void StopBreakTimer();
 void ToggleBreakTimer(int minutes = 5);
 void CommitBreakTimerInput();
+void GetBreakTimerCenter(float& cx, float& cy);
 
 LRESULT CALLBACK OverlayWndProc(HWND, UINT, WPARAM, LPARAM);
 LRESULT CALLBACK SettingsWndProc(HWND, UINT, WPARAM, LPARAM);
@@ -109,15 +134,22 @@ LRESULT CALLBACK ToastWndProc(HWND, UINT, WPARAM, LPARAM);
 LRESULT CALLBACK LowLevelKeyboardProc(int, WPARAM, LPARAM);
 LRESULT CALLBACK LowLevelMouseProc(int, WPARAM, LPARAM);
 
+extern UINT WM_TASKBARCREATED;
+
 void UpdateCamera();
 void RepositionOverlay();
 void CreateOverlayBackbuffer();
 void DestroyOverlayBackbuffer();
 void PresentOverlayFrame();
 void CopyScreenshotToClipboard();
-void UndoLastStroke();
+void CopyRegionToClipboard(RECT rcScreen);
+void StartCropSelection();
+bool UndoLastStroke();
 void RedrawOverlay();
 void ResetDrawingState();
+void SyncOverlayVisibility();
+void ProcessOverlayFrame();
+void RepositionToast();
 
 void ShowNotification(const std::wstring& title, const std::wstring& message, COLORREF accentColor = RGB(0, 150, 255));
 void InitToastWindow(HINSTANCE hInstance);
@@ -140,4 +172,3 @@ void ShowWelcomeWindow(HINSTANCE);
 bool SetAutoStart(bool enable);
 bool IsAutoStartEnabled();
 bool CreateDesktopShortcut();
-bool SelfInstallIfNeeded();

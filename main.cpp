@@ -26,8 +26,19 @@ COLORREF g_inkOverride = 0;
 bool g_inkOverrideSet = false;
 bool g_persistentDrawingsActive = false;
 ActiveToolMode g_activeToolMode = ActiveToolMode::None;
+BoardMode g_boardMode = BoardMode::None;
+bool g_cropMode = false;
+bool g_cropDragging = false;
+POINT g_cropStart = { 0, 0 };
+POINT g_cropEnd = { 0, 0 };
+bool g_laserMode = false;
+bool g_spotlightMode = false;
+bool g_keycastEnabled = true;
+bool g_isTextInputActive = false;
+Stroke g_textDraft;
 
 typedef BOOL(WINAPI* pfnMagSetFullscreenUseBitmapSmoothing)(BOOL);
+typedef BOOL(WINAPI* pfnMagSetFullscreenWindowFilterList)(DWORD, int, HWND*);
 
 void LoadAppIcon(HINSTANCE hInstance) {
     int cxSmall = GetSystemMetrics(SM_CXSMICON);
@@ -63,12 +74,13 @@ void StartZoomTimer() {
 }
 
 void StopZoomTimer() {
+    ProcessOverlayFrame();
     if (g_hwndOverlay) KillTimer(g_hwndOverlay, 1);
 }
 
 bool RequiresZoomTimer() {
     if (g_isDrawingLine || g_isDrawingArrow || g_isDrawRectangle || g_isDrawingHighlight || g_isDrawingBlur) return true;
-    if (fabsf(g_currentZoom - 1.0f) > 0.002f || fabsf(g_targetZoom - 1.0f) > 0.002f) return true;
+    if (fabsf(g_currentZoom - g_targetZoom) > 0.001f) return true;
     return false;
 }
 
@@ -82,31 +94,21 @@ int APIENTRY WinMain(
     (void)lpCmdLine;
     (void)nCmdShow;
 
-    HWND hExisting = FindWindowW(L"LensItOverlay", NULL);
-    if (hExisting) {
-        DWORD oldPid = 0;
-        GetWindowThreadProcessId(hExisting, &oldPid);
-
-        PostMessageW(hExisting, WM_CLOSE, 0, 0);
-
-        if (oldPid != 0 && oldPid != GetCurrentProcessId()) {
-            HANDLE hProc = OpenProcess(SYNCHRONIZE | PROCESS_TERMINATE, FALSE, oldPid);
-            if (hProc) {
-                if (WaitForSingleObject(hProc, 1500) == WAIT_TIMEOUT) {
-                    TerminateProcess(hProc, 0);
-                }
-                CloseHandle(hProc);
-            }
+    HANDLE hSingleInstanceMutex = CreateMutexW(NULL, TRUE, L"LensIt_SingleInstance_Mutex");
+    if (hSingleInstanceMutex && GetLastError() == ERROR_ALREADY_EXISTS) {
+        HWND hExisting = FindWindowW(L"LensItOverlay", NULL);
+        if (hExisting) {
+            PostMessageW(hExisting, WM_APP_SHOWSETTINGS, 0, 0);
         }
-        Sleep(50);
+        if (hSingleInstanceMutex) {
+            ReleaseMutex(hSingleInstanceMutex);
+            CloseHandle(hSingleInstanceMutex);
+        }
+        return 0;
     }
 
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     HRESULT hrCo = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
-
-#ifndef _DEBUG
-    SelfInstallIfNeeded();
-#endif
 
     GdiplusStartupInput gdiplusStartupInput;
     ULONG_PTR gdiplusToken;
@@ -121,13 +123,15 @@ int APIENTRY WinMain(
         return 1;
     }
 
+    MagShowSystemCursor(TRUE);
+
     HMODULE hMag = GetModuleHandle(L"magnification.dll");
     if (hMag) {
         auto pSetSmoothing = (pfnMagSetFullscreenUseBitmapSmoothing)GetProcAddress(hMag, "MagSetFullscreenUseBitmapSmoothing");
         if (pSetSmoothing) pSetSmoothing(TRUE);
     }
 
-    WNDCLASSEX wcOverlay = { sizeof(WNDCLASSEX), 0, OverlayWndProc, 0, 0, hInstance, g_appIcon, LoadCursor(NULL, IDC_ARROW), (HBRUSH)GetStockObject(BLACK_BRUSH), NULL, L"LensItOverlay", g_appIcon };
+    WNDCLASSEX wcOverlay = { sizeof(WNDCLASSEX), 0, OverlayWndProc, 0, 0, hInstance, g_appIcon, NULL, (HBRUSH)GetStockObject(BLACK_BRUSH), NULL, L"LensItOverlay", g_appIcon };
     RegisterClassEx(&wcOverlay);
 
     WNDCLASSEX wcSettings = { sizeof(WNDCLASSEX), 0, SettingsWndProc, 0, 0, hInstance, g_appIcon, LoadCursor(NULL, IDC_ARROW), NULL, NULL, L"LensItSettings", g_appIcon };
@@ -151,9 +155,20 @@ int APIENTRY WinMain(
         L"LensItOverlay", L"Overlay", WS_POPUP, vScreenX, vScreenY, screenW, screenH, NULL, NULL, hInstance, NULL
     );
 
-    ShowWindow(g_hwndOverlay, SW_SHOW);
+    SetWindowDisplayAffinity(g_hwndOverlay, WDA_EXCLUDEFROMCAPTURE);
+
+    if (hMag) {
+        auto pSetFilter = (pfnMagSetFullscreenWindowFilterList)GetProcAddress(hMag, "MagSetFullscreenWindowFilterList");
+        if (pSetFilter) {
+            HWND hExclude[1] = { g_hwndOverlay };
+            pSetFilter(MW_FILTERMODE_EXCLUDE, 1, hExclude);
+        }
+    }
+
+    ShowWindow(g_hwndOverlay, SW_HIDE);
 
     RepositionOverlay();
+    WM_TASKBARCREATED = RegisterWindowMessageW(L"TaskbarCreated");
     InitTray(g_hwndOverlay, hInstance);
 
     if (g_config.isFirstRun) {
@@ -181,5 +196,9 @@ int APIENTRY WinMain(
     if (SUCCEEDED(hrCo)) CoUninitialize();
     if (g_appIcon) DestroyIcon(g_appIcon);
     SaveConfig();
+    if (hSingleInstanceMutex) {
+        ReleaseMutex(hSingleInstanceMutex);
+        CloseHandle(hSingleInstanceMutex);
+    }
     return 0;
 }

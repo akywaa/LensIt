@@ -1,5 +1,7 @@
 #include "LensIt.h"
 
+UINT WM_TASKBARCREATED = 0;
+
 static char g_configBuf[MAX_PATH];
 static bool g_configPathReady = false;
 
@@ -18,6 +20,13 @@ static float s_toastAlpha = 0.0f;
 static int s_toastHoldFrames = 0;
 static const int TOAST_W = 270;
 static const int TOAST_H = 68;
+
+static bool s_framePending = false;
+
+bool g_keycastText = false;
+std::wstring g_keycastTextValue;
+ULONGLONG g_keycastUntilTick = 0;
+static POINT s_cursorPos = { 0, 0 };
 
 // Break timer variables
 bool g_isBreakTimerActive = false;
@@ -171,6 +180,21 @@ void CommitBreakTimerInput() {
     RedrawOverlay();
 }
 
+void GetBreakTimerCenter(float& cx, float& cy) {
+    int vScreenX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    int vScreenY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    POINT pt;
+    HMONITOR hMon = GetCursorPos(&pt) ? MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST) : NULL;
+    MONITORINFO mi = { sizeof(mi) };
+    if (!hMon || !GetMonitorInfo(hMon, &mi)) {
+        cx = GetSystemMetrics(SM_CXVIRTUALSCREEN) / 2.0f;
+        cy = GetSystemMetrics(SM_CYVIRTUALSCREEN) / 2.0f;
+        return;
+    }
+    cx = ((mi.rcMonitor.left + mi.rcMonitor.right) / 2.0f) - (float)vScreenX;
+    cy = ((mi.rcMonitor.top + mi.rcMonitor.bottom) / 2.0f) - (float)vScreenY;
+}
+
 static void DrawBreakTimerUI(Graphics& g, int w, int h) {
     SolidBrush dimBg(Color(220, 10, 10, 14));
     g.FillRectangle(&dimBg, 0, 0, w, h);
@@ -183,8 +207,9 @@ static void DrawBreakTimerUI(Graphics& g, int w, int h) {
     fmtCenter.SetAlignment(StringAlignmentCenter);
     fmtCenter.SetLineAlignment(StringAlignmentCenter);
 
-    float cx = (float)w / 2.0f;
-    float cy = (float)h / 2.0f;
+    float cx = 0.0f;
+    float cy = 0.0f;
+    GetBreakTimerCenter(cx, cy);
 
     float totalW = 340.0f;
     float barH = 6.0f;
@@ -301,11 +326,32 @@ void PresentOverlayFrame() {
 
     memset(g_dibBits, 0, (size_t)g_backStride * (size_t)g_backHeight);
 
+    POINT curPt = s_cursorPos;
+    {
+        POINT pt;
+        if (GetCursorPos(&pt)) {
+            s_cursorPos = pt;
+            curPt = pt;
+        }
+    }
+
     {
         Bitmap surface(g_backWidth, g_backHeight, g_backStride, PixelFormat32bppPARGB, (BYTE*)g_dibBits);
         Graphics g(&surface);
         g.SetSmoothingMode(SmoothingModeAntiAlias);
         g.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
+
+        if (g_spotlightMode) {
+            GraphicsPath spotPath;
+            spotPath.AddRectangle(Rect(0, 0, g_backWidth, g_backHeight));
+            float r = 180.0f;
+            float cx = (float)(curPt.x - GetSystemMetrics(SM_XVIRTUALSCREEN));
+            float cy = (float)(curPt.y - GetSystemMetrics(SM_YVIRTUALSCREEN));
+            spotPath.AddEllipse(cx - r, cy - r, r * 2.0f, r * 2.0f);
+            spotPath.SetFillMode(FillModeAlternate);
+            SolidBrush dimBrush(Color(180, 0, 0, 0));
+            g.FillPath(&dimBrush, &spotPath);
+        }
 
         if (g_isBreakTimerActive) {
             DrawBreakTimerUI(g, g_backWidth, g_backHeight);
@@ -314,8 +360,68 @@ void PresentOverlayFrame() {
             int vScreenX = GetSystemMetrics(SM_XVIRTUALSCREEN);
             int vScreenY = GetSystemMetrics(SM_YVIRTUALSCREEN);
 
+            if (g_boardMode == BoardMode::White) {
+                SolidBrush boardBrush(Color(255, 255, 255, 255));
+                g.FillRectangle(&boardBrush, 0, 0, g_backWidth, g_backHeight);
+            }
+            else if (g_boardMode == BoardMode::Dark) {
+                SolidBrush boardBrush(Color(255, 24, 24, 27));
+                g.FillRectangle(&boardBrush, 0, 0, g_backWidth, g_backHeight);
+            }
+
             for (const auto& s : g_strokes) DrawStroke(g, s, vScreenX, vScreenY);
             if (!g_currentStroke.points.empty()) DrawStroke(g, g_currentStroke, vScreenX, vScreenY);
+            if (g_isTextInputActive && !g_textDraft.points.empty()) {
+                Stroke caretDraft = g_textDraft;
+                caretDraft.text = g_textDraft.text + (((GetTickCount64() / 500) % 2) ? L" " : L"|");
+                DrawStroke(g, caretDraft, vScreenX, vScreenY);
+            }
+
+            if (g_cropMode) {
+                SolidBrush dimCrop(Color(140, 0, 0, 0));
+                if (g_cropDragging) {
+                    int l = min(g_cropStart.x, g_cropEnd.x) - vScreenX;
+                    int t = min(g_cropStart.y, g_cropEnd.y) - vScreenY;
+                    int r = max(g_cropStart.x, g_cropEnd.x) - vScreenX;
+                    int b = max(g_cropStart.y, g_cropEnd.y) - vScreenY;
+                    g.FillRectangle(&dimCrop, 0, 0, g_backWidth, t);
+                    g.FillRectangle(&dimCrop, 0, b, g_backWidth, g_backHeight - b);
+                    g.FillRectangle(&dimCrop, 0, t, l, b - t);
+                    g.FillRectangle(&dimCrop, r, t, g_backWidth - r, b - t);
+                    Pen cropPen(Color(255, 0, 160, 255), 1.5f);
+                    cropPen.SetDashStyle(DashStyleDash);
+                    g.DrawRectangle(&cropPen, (REAL)l, (REAL)t, (REAL)(r - l), (REAL)(b - t));
+                }
+                else {
+                    g.FillRectangle(&dimCrop, 0, 0, g_backWidth, g_backHeight);
+                }
+            }
+        }
+
+        if (g_keycastText) {
+            const int kw = 220, kh = 56;
+            int kx = g_backWidth - kw - 28;
+            int ky = g_backHeight - kh - 88;
+
+            GraphicsPath cardPath;
+            float radius = 12.0f;
+            float d = radius * 2.0f;
+            cardPath.AddArc((float)kx, (float)ky, d, d, 180.0f, 90.0f);
+            cardPath.AddArc((float)(kx + kw - d), (float)ky, d, d, 270.0f, 90.0f);
+            cardPath.AddArc((float)(kx + kw - d), (float)(ky + kh - d), d, d, 0.0f, 90.0f);
+            cardPath.AddArc((float)kx, (float)(ky + kh - d), d, d, 90.0f, 90.0f);
+            cardPath.CloseFigure();
+            SolidBrush bgCard(Color(215, 18, 18, 24));
+            g.FillPath(&bgCard, &cardPath);
+            Pen borderPen(Color(200, 90, 90, 110), 1.0f);
+            g.DrawPath(&borderPen, &cardPath);
+
+            StringFormat fmtCenter;
+            fmtCenter.SetAlignment(StringAlignmentCenter);
+            fmtCenter.SetLineAlignment(StringAlignmentCenter);
+            Font fontKey(L"Consolas", 13.0f, FontStyleBold);
+            SolidBrush textWhite(Color(255, 240, 240, 250));
+            g.DrawString(g_keycastTextValue.c_str(), -1, &fontKey, RectF((REAL)kx, (REAL)ky, (REAL)kw, (REAL)kh), &fmtCenter, &textWhite);
         }
     }
 
@@ -327,9 +433,11 @@ void PresentOverlayFrame() {
         UpdateLayeredWindow(g_hwndOverlay, screenDC, NULL, &size, g_memDC, &ptSrc, 0, &blend, ULW_ALPHA);
         ReleaseDC(NULL, screenDC);
     }
+
+    SyncOverlayVisibility();
 }
 
-void UndoLastStroke() {
+bool UndoLastStroke() {
     if (!g_strokes.empty()) {
         if (g_strokes.back().type == StrokeType::Badge && g_stepCounter > 1) {
             g_stepCounter--;
@@ -339,11 +447,130 @@ void UndoLastStroke() {
             g_persistentDrawingsActive = false;
         }
         RedrawOverlay();
+        return true;
     }
+    return false;
 }
 
 void RedrawOverlay() {
+    s_framePending = true;
+    if (g_hwndOverlay) SetTimer(g_hwndOverlay, 3, 14, NULL);
+}
+
+void PruneVanishingStrokes() {
+    ULONGLONG now = GetTickCount64();
+    bool changed = false;
+    for (size_t i = g_strokes.size(); i > 0; ) {
+        --i;
+        Stroke& s = g_strokes[i];
+        if (s.birthTick == 0) continue;
+        float age = (float)(now - s.birthTick);
+        if (age >= 1200.0f) {
+            g_strokes.erase(g_strokes.begin() + i);
+            changed = true;
+        }
+        else if (age >= 600.0f) {
+            float k = 1.0f - (age - 600.0f) / 600.0f;
+            if (k < 0.0f) k = 0.0f;
+            if (k < s.opacity) {
+                s.opacity = k;
+                changed = true;
+            }
+        }
+    }
+    if (changed) {
+        if (g_strokes.empty()) {
+            g_persistentDrawingsActive = false;
+        }
+        s_framePending = true;
+    }
+}
+
+void ProcessOverlayFrame() {
+    PruneVanishingStrokes();
+
+    POINT pt = { 0, 0 };
+    bool mouseMoved = false;
+    if (GetCursorPos(&pt)) {
+        if (pt.x != s_cursorPos.x || pt.y != s_cursorPos.y) {
+            s_cursorPos = pt;
+            mouseMoved = true;
+        }
+    }
+
+    static bool s_prevSpotlight = false;
+    static bool s_prevKeycast = false;
+    if (g_spotlightMode != s_prevSpotlight) {
+        s_prevSpotlight = g_spotlightMode;
+        s_framePending = true;
+    }
+    if (g_keycastText != s_prevKeycast) {
+        s_prevKeycast = g_keycastText;
+        s_framePending = true;
+    }
+
+    if (g_spotlightMode && mouseMoved) {
+        s_framePending = true;
+    }
+
+    bool isDrawingStroke = g_isDrawingLine || g_isDrawingArrow || g_isDrawRectangle ||
+                           g_isDrawingHighlight || g_isDrawingBlur || !g_currentStroke.points.empty();
+    if (isDrawingStroke) {
+        s_framePending = true;
+    }
+
+    if (g_isTextInputActive) {
+        s_framePending = true;
+    }
+
+    if (g_keycastText && GetTickCount64() > g_keycastUntilTick) {
+        g_keycastText = false;
+        s_framePending = true;
+    }
+
+    bool animating = g_isTextInputActive || g_keycastText;
+    if (!animating) {
+        for (const auto& s : g_strokes) {
+            if (s.birthTick != 0) {
+                animating = true;
+                break;
+            }
+        }
+    }
+
+    if (!s_framePending) {
+        if (!animating && g_hwndOverlay) KillTimer(g_hwndOverlay, 3);
+        return;
+    }
+    s_framePending = false;
+    if (animating) SetTimer(g_hwndOverlay, 3, 14, NULL);
     PresentOverlayFrame();
+}
+
+void SyncOverlayVisibility() {
+    if (!g_hwndOverlay) return;
+
+    bool shouldBeVisible = g_isBreakTimerActive ||
+                           g_isTriggerHeld ||
+                           g_spotlightMode ||
+                           g_isTextInputActive ||
+                           g_keycastText ||
+                           g_cropMode ||
+                           (g_boardMode != BoardMode::None) ||
+                           g_persistentDrawingsActive ||
+                           !g_strokes.empty() ||
+                           !g_currentStroke.points.empty() ||
+                           (fabsf(g_currentZoom - 1.0f) > 0.002f) ||
+                           (fabsf(g_targetZoom - 1.0f) > 0.002f);
+
+    bool isVisible = (IsWindowVisible(g_hwndOverlay) != FALSE);
+
+    if (shouldBeVisible && !isVisible) {
+        ShowWindow(g_hwndOverlay, SW_SHOWNOACTIVATE);
+    }
+    else if (!shouldBeVisible && isVisible) {
+        ShowWindow(g_hwndOverlay, SW_HIDE);
+    }
 }
 
 void UpdateCamera() {
@@ -357,6 +584,7 @@ void UpdateCamera() {
     if (g_currentZoom <= 1.001f) {
         MagSetFullscreenTransform(1.0f, 0, 0);
         g_camX = g_camY = 0;
+        SyncOverlayVisibility();
         return;
     }
 
@@ -386,7 +614,7 @@ void RepositionOverlay() {
 
     SetWindowPos(g_hwndOverlay, HWND_TOPMOST,
         vScreenX, vScreenY, screenW, screenH,
-        SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        SWP_NOACTIVATE);
 
     CreateOverlayBackbuffer();
     PresentOverlayFrame();
@@ -470,7 +698,24 @@ std::shared_ptr<Bitmap> BakeBlurredBitmap(RECT rc) {
     return resultBmp;
 }
 
+static void ApplyStrokeAlpha(const Stroke& stroke, Color& col) {
+    if (stroke.opacity >= 0.999f) return;
+    col = Color((BYTE)(col.GetAlpha() * stroke.opacity), col.GetRed(), col.GetGreen(), col.GetBlue());
+}
+
 void DrawStroke(Graphics& g, const Stroke& stroke, int offX, int offY) {
+    if (stroke.type == StrokeType::Text) {
+        if (stroke.points.empty()) return;
+        COLORREF c = stroke.color ? stroke.color : g_config.lineColor;
+        Color col(255, GetRValue(c), GetGValue(c), GetBValue(c));
+        ApplyStrokeAlpha(stroke, col);
+        SolidBrush textBrush(col);
+        Font font(L"Segoe UI", 18.0f, FontStyleBold);
+        PointF origin((REAL)(stroke.points[0].x - offX), (REAL)(stroke.points[0].y - offY));
+        g.DrawString(stroke.text.c_str(), -1, &font, origin, &textBrush);
+        return;
+    }
+
     if (stroke.type == StrokeType::Badge) {
         if (stroke.points.empty()) return;
         int x = stroke.points[0].x - offX;
@@ -479,6 +724,7 @@ void DrawStroke(Graphics& g, const Stroke& stroke, int offX, int offY) {
 
         COLORREF bg = stroke.color ? stroke.color : g_config.badgeColor;
         Color bgCol(255, GetRValue(bg), GetGValue(bg), GetBValue(bg));
+        ApplyStrokeAlpha(stroke, bgCol);
         SolidBrush bgBrush(bgCol);
         Pen borderPen(Color(255, 30, 30, 30), 2.0f);
         g.FillEllipse(&bgBrush, x - radius, y - radius, radius * 2, radius * 2);
@@ -531,6 +777,7 @@ void DrawStroke(Graphics& g, const Stroke& stroke, int offX, int offY) {
         int top = min(a.y, b.y) - offY;
         int bottom = max(a.y, b.y) - offY;
         Color fillCol(110, GetRValue(c), GetGValue(c), GetBValue(c));
+        ApplyStrokeAlpha(stroke, fillCol);
         SolidBrush fill(fillCol);
         g.FillRectangle(&fill, (REAL)left, (REAL)top, (REAL)(right - left), (REAL)(bottom - top));
         return;
@@ -539,6 +786,7 @@ void DrawStroke(Graphics& g, const Stroke& stroke, int offX, int offY) {
     if (stroke.type == StrokeType::Line) {
         COLORREF c = stroke.color ? stroke.color : g_config.lineColor;
         Color col(255, GetRValue(c), GetGValue(c), GetBValue(c));
+        ApplyStrokeAlpha(stroke, col);
         Pen pen(col, (REAL)g_config.lineWidth);
         pen.SetStartCap(LineCapRound);
         pen.SetEndCap(LineCapRound);
@@ -554,6 +802,7 @@ void DrawStroke(Graphics& g, const Stroke& stroke, int offX, int offY) {
     else if (stroke.type == StrokeType::Arrow) {
         COLORREF c = stroke.color ? stroke.color : g_config.arrowColor;
         Color col(255, GetRValue(c), GetGValue(c), GetBValue(c));
+        ApplyStrokeAlpha(stroke, col);
         Pen pen(col, (REAL)g_config.arrowWidth);
         SolidBrush brush(col);
         DrawArrow(g, pen, brush, stroke.points.front(), stroke.points.back(), g_config.arrowWidth, offX, offY);
@@ -561,6 +810,7 @@ void DrawStroke(Graphics& g, const Stroke& stroke, int offX, int offY) {
     else if (stroke.type == StrokeType::Rectangle) {
         COLORREF c = stroke.color ? stroke.color : g_config.rectColor;
         Color col(255, GetRValue(c), GetGValue(c), GetBValue(c));
+        ApplyStrokeAlpha(stroke, col);
         Pen pen(col, (REAL)g_config.rectWidth);
         pen.SetStartCap(LineCapRound);
         pen.SetEndCap(LineCapRound);
@@ -573,6 +823,17 @@ void DrawStroke(Graphics& g, const Stroke& stroke, int offX, int offY) {
         int top = min(a.y, b.y) - offY;
         int bottom = max(a.y, b.y) - offY;
         g.DrawRectangle(&pen, (REAL)left, (REAL)top, (REAL)(right - left), (REAL)(bottom - top));
+    }
+}
+
+static void FillBoardBackground(Graphics& g, int x, int y, int w, int h) {
+    if (g_boardMode == BoardMode::White) {
+        SolidBrush boardBrush(Color(255, 255, 255, 255));
+        g.FillRectangle(&boardBrush, x, y, w, h);
+    }
+    else if (g_boardMode == BoardMode::Dark) {
+        SolidBrush boardBrush(Color(255, 24, 24, 27));
+        g.FillRectangle(&boardBrush, x, y, w, h);
     }
 }
 
@@ -593,6 +854,7 @@ void CopyScreenshotToClipboard() {
     {
         Graphics g(captureDC);
         g.SetSmoothingMode(SmoothingModeAntiAlias);
+        FillBoardBackground(g, 0, 0, scrW, scrH);
         for (const auto& s : g_strokes) DrawStroke(g, s, vScreenX, vScreenY);
         if (!g_currentStroke.points.empty()) DrawStroke(g, g_currentStroke, vScreenX, vScreenY);
     }
@@ -601,14 +863,87 @@ void CopyScreenshotToClipboard() {
     DeleteDC(captureDC);
     ReleaseDC(NULL, screenDC);
 
-    if (OpenClipboard(g_hwndOverlay)) {
+    bool opened = false;
+    for (int i = 0; i < 5; ++i) {
+        if (OpenClipboard(g_hwndOverlay)) {
+            opened = true;
+            break;
+        }
+        Sleep(10);
+    }
+
+    if (opened) {
         EmptyClipboard();
-        SetClipboardData(CF_BITMAP, hBmp);
+        if (!SetClipboardData(CF_BITMAP, hBmp)) {
+            DeleteObject(hBmp);
+        }
         CloseClipboard();
     }
     else {
         DeleteObject(hBmp);
     }
+}
+
+void CopyRegionToClipboard(RECT rcScreen) {
+    int vScreenX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    int vScreenY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+
+    int left = max(rcScreen.left, vScreenX);
+    int top = max(rcScreen.top, vScreenY);
+    int right = min(rcScreen.right, vScreenX + GetSystemMetrics(SM_CXVIRTUALSCREEN));
+    int bottom = min(rcScreen.bottom, vScreenY + GetSystemMetrics(SM_CYVIRTUALSCREEN));
+
+    int w = right - left;
+    int h = bottom - top;
+    if (w < 1 || h < 1) return;
+
+    HDC screenDC = GetDC(NULL);
+    if (!screenDC) return;
+    HDC captureDC = CreateCompatibleDC(screenDC);
+    HBITMAP hBmp = CreateCompatibleBitmap(screenDC, w, h);
+    HBITMAP hOldBmp = (HBITMAP)SelectObject(captureDC, hBmp);
+
+    BitBlt(captureDC, 0, 0, w, h, screenDC, left, top, SRCCOPY);
+
+    {
+        Graphics g(captureDC);
+        g.SetSmoothingMode(SmoothingModeAntiAlias);
+        FillBoardBackground(g, 0, 0, w, h);
+        for (const auto& s : g_strokes) DrawStroke(g, s, left, top);
+        if (!g_currentStroke.points.empty()) DrawStroke(g, g_currentStroke, left, top);
+    }
+
+    SelectObject(captureDC, hOldBmp);
+    DeleteDC(captureDC);
+    ReleaseDC(NULL, screenDC);
+
+    bool opened = false;
+    for (int i = 0; i < 5; ++i) {
+        if (OpenClipboard(g_hwndOverlay)) {
+            opened = true;
+            break;
+        }
+        Sleep(10);
+    }
+
+    if (opened) {
+        EmptyClipboard();
+        if (!SetClipboardData(CF_BITMAP, hBmp)) {
+            DeleteObject(hBmp);
+        }
+        CloseClipboard();
+    }
+    else {
+        DeleteObject(hBmp);
+    }
+}
+
+void StartCropSelection() {
+    if (!g_hwndOverlay) return;
+    g_cropMode = true;
+    ShowWindow(g_hwndOverlay, SW_SHOWNOACTIVATE);
+    SetCursor(LoadCursor(NULL, IDC_CROSS));
+    RedrawOverlay();
 }
 
 void ApplyToastCaptureAffinity() {
@@ -715,9 +1050,19 @@ void ShowNotification(const std::wstring& title, const std::wstring& message, CO
     s_toastHoldFrames = 90;
     s_toastAlpha = 0.05f;
 
+    RepositionToast();
     ShowWindow(g_hwndToast, SW_SHOWNOACTIVATE);
     SetTimer(g_hwndToast, 101, 16, NULL);
     RenderToastFrame();
+}
+
+void RepositionToast() {
+    if (!g_hwndToast) return;
+    int sw = GetSystemMetrics(SM_CXSCREEN);
+    int sh = GetSystemMetrics(SM_CYSCREEN);
+    int x = sw - TOAST_W - 24;
+    int y = sh - TOAST_H - 48;
+    SetWindowPos(g_hwndToast, HWND_TOPMOST, x, y, TOAST_W, TOAST_H, SWP_NOACTIVATE);
 }
 
 LRESULT CALLBACK ToastWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -752,6 +1097,12 @@ LRESULT CALLBACK ToastWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 }
 
 LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (WM_TASKBARCREATED != 0 && msg == WM_TASKBARCREATED) {
+        g_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+        Shell_NotifyIcon(NIM_ADD, &g_nid);
+        return 0;
+    }
+
     switch (msg) {
     case WM_CLOSE:
         MagSetFullscreenTransform(1.0f, 0, 0);
@@ -774,6 +1125,10 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             if (cmd == ID_TRAY_SETTINGS) ShowSettingsWindow(GetModuleHandle(NULL));
             else if (cmd == ID_TRAY_EXIT) PostQuitMessage(0);
         }
+        return 0;
+
+    case WM_APP_SHOWSETTINGS:
+        ShowSettingsWindow(GetModuleHandle(NULL));
         return 0;
 
     case WM_MEASUREITEM: {
@@ -812,8 +1167,13 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         return 1;
 
     case WM_TIMER:
-        if (wParam == 1) {
+        if (wParam == 3) {
+            ProcessOverlayFrame();
+            return 0;
+        }
+        else if (wParam == 1) {
             UpdateCamera();
+            ProcessOverlayFrame();
             if (!RequiresZoomTimer()) StopZoomTimer();
             return 0;
         }

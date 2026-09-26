@@ -148,7 +148,13 @@ void ShowWelcomeWindow(HINSTANCE hInstance) {
         return;
     }
 
-    UINT dpi = GetDpiForSystem();
+    g_hwndWelcome = CreateWindowEx(
+        WS_EX_TOPMOST, L"LensItWelcome", L"Welcome to LensIt",
+        WS_POPUP | WS_CAPTION | WS_SYSMENU,
+        0, 0, 400, 420, NULL, NULL, hInstance, NULL
+    );
+
+    UINT dpi = GetDpiForWindow(g_hwndWelcome);
     g_uiScale = (dpi > 0) ? ((float)dpi / 96.0f) : 1.0f;
 
     RECT wr = { 0, 0, (int)(400 * g_uiScale), (int)(420 * g_uiScale) };
@@ -159,11 +165,7 @@ void ShowWelcomeWindow(HINSTANCE hInstance) {
     int cx = (GetSystemMetrics(SM_CXSCREEN) - w) / 2;
     int cy = (GetSystemMetrics(SM_CYSCREEN) - h) / 2;
 
-    g_hwndWelcome = CreateWindowEx(
-        WS_EX_TOPMOST, L"LensItWelcome", L"Welcome to LensIt",
-        WS_POPUP | WS_CAPTION | WS_SYSMENU,
-        cx, cy, w, h, NULL, NULL, hInstance, NULL
-    );
+    SetWindowPos(g_hwndWelcome, HWND_TOPMOST, cx, cy, w, h, SWP_NOACTIVATE);
 
     BOOL dark = TRUE;
     DwmSetWindowAttribute(g_hwndWelcome, 20, &dark, sizeof(dark));

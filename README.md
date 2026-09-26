@@ -15,7 +15,7 @@ Hold a key and scroll to zoom in on anything, draw lines, arrows and rectangles,
 
 ---
 
-## ✨ Features
+## Features
 
 - Single executable, under 1 MB
 - Around 15 MB of RAM
@@ -36,7 +36,7 @@ Hold a key and scroll to zoom in on anything, draw lines, arrows and rectangles,
 - Lives in the tray, no taskbar clutter
 - Settings are saved automatically to a local `config.ini` next to the exe
 
-## 🕹 Usage
+## Usage
 
 | Action | Input |
 |---|---|
@@ -62,7 +62,7 @@ Hold a key and scroll to zoom in on anything, draw lines, arrows and rectangles,
 > **Note for gamers:** LensIt overlays the screen and hooks into system-wide magnification, so it won't work over apps running in true exclusive fullscreen (Geometry Dash, Counter-Strike 2, and a lot of other games behave this way).
 > If you want to use LensIt with a game like that, switch its display mode to Borderless / Windowed Borderless, or plain Windowed, in the game's video settings.
 
-## ⏳ Break Countdown Timer
+## Break Countdown Timer
 
 Need a 5-minute break, or want to give people time for an exercise during a webinar, lecture or stream? Press **`[Trigger] + T`** and you get a translucent backdrop with a countdown clock and progress bar.
 
@@ -73,7 +73,7 @@ Need a 5-minute break, or want to give people time for an exercise during a webi
 - **Dismiss:** `Esc` (or `[Trigger] + T` again)
 - When it hits zero you get a quiet chime and a toast notification
 
-## ⚙️ Settings
+## Settings
 
 Right-click the tray icon and open **Settings** to configure:
 
@@ -87,7 +87,7 @@ Right-click the tray icon and open **Settings** to configure:
 
 Everything saves automatically to `config.ini`.
 
-## 📥 Installation
+## Installation
 
 1. Go to the [Releases](../../releases) page
 2. Grab the latest `LensIt.exe`
@@ -95,7 +95,7 @@ Everything saves automatically to `config.ini`.
 
 On first launch you'll get a small welcome dialog offering to enable startup with Windows and create a desktop shortcut, both optional. To remove it, just delete the `.exe` and, if one was created, `config.ini`.
 
-## 🛠 Building from source
+## Building from source
 
 **Requirements:**
 - Windows 10 / 11
@@ -113,7 +113,7 @@ On first launch you'll get a small welcome dialog offering to enable startup wit
 
 The compiled binary will be located in the `x64/Release/` directory. All required libraries (`magnification.lib`, `gdiplus.lib`, etc.) are part of the standard Windows SDK - no extra dependencies needed.
 
-## 🧩 Tech stack
+## Tech stack
 
 - C++ with the native Win32 API
 - Windows Magnification API for hardware-accelerated zoom
@@ -137,7 +137,7 @@ The compiled binary will be located in the `x64/Release/` directory. All require
 
 ---
 
-## ✨ Возможности
+## Возможности
 
 - Один exe-файл, меньше 1 МБ
 - Около 15 МБ ОЗУ
@@ -158,7 +158,7 @@ The compiled binary will be located in the `x64/Release/` directory. All require
 - Живёт в трее, не занимает панель задач
 - Настройки сохраняются автоматически в `config.ini` рядом с exe
 
-## 🕹 Использование
+## Использование
 
 | Действие | Управление |
 |---|---|
@@ -184,7 +184,7 @@ The compiled binary will be located in the `x64/Release/` directory. All require
 > **Для геймеров:** LensIt накладывается поверх экрана и цепляется к системному масштабированию, поэтому не работает поверх игр в настоящем exclusive fullscreen режиме (Geometry Dash, Counter-Strike 2 и многие другие так себя ведут).
 > Чтобы LensIt заработал, переключи игру на Borderless / Windowed Borderless или обычный оконный режим в настройках графики.
 
-## ⏳ Таймер перерыва (Break Timer)
+## Таймер перерыва (Break Timer)
 
 Нужен 5-минутный перерыв или время на задание во время созвона, вебинара или стрима? Нажми **`[Триггер] + T`** - экран затемнится, появится крупный таймер с прогресс-баром.
 
@@ -195,7 +195,7 @@ The compiled binary will be located in the `x64/Release/` directory. All require
 - **Закрыть:** `Esc` (или снова `[Триггер] + T`)
 - По окончании - тихий системный сигнал и toast-уведомление
 
-## ⚙️ Настройки
+## Настройки
 
 ПКМ по иконке в трее → **Settings**, там можно настроить:
 
@@ -209,7 +209,7 @@ The compiled binary will be located in the `x64/Release/` directory. All require
 
 Все изменения сохраняются в `config.ini` автоматически.
 
-## 📥 Установка
+## Установка
 
 1. Открой страницу [Releases](../../releases)
 2. Скачай последний `LensIt.exe`
@@ -217,7 +217,7 @@ The compiled binary will be located in the `x64/Release/` directory. All require
 
 При первом запуске появится окошко с предложением включить автозапуск и создать ярлык на рабочем столе - оба пункта опциональны. Чтобы удалить программу, просто сотри `.exe`, а заодно и `config.ini`, если он успел создаться.
 
-## 🛠 Сборка из исходников
+## Сборка из исходников
 
 **Требования:**
 - Windows 10 / 11

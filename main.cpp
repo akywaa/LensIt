@@ -1,11 +1,10 @@
 #include "LensIt.h"
+#include "WinHandles.h"
 
 AppConfig g_config;
 HWND g_hwndOverlay = NULL;
 HWND g_hwndSettings = NULL;
 HWND g_hwndToast = NULL;
-HHOOK g_kbdHook = NULL;
-HHOOK g_mouseHook = NULL;
 bool g_isTriggerHeld = false;
 bool g_isDrawingLine = false;
 bool g_isDrawingArrow = false;
@@ -44,14 +43,14 @@ void LoadAppIcon(HINSTANCE hInstance) {
     int cxSmall = GetSystemMetrics(SM_CXSMICON);
     int cySmall = GetSystemMetrics(SM_CYSMICON);
 
-    g_appIcon = (HICON)LoadImageW(
+    g_appIcon = reinterpret_cast<HICON>(LoadImageW(
         hInstance,
         MAKEINTRESOURCE(IDI_APP_ICON),
         IMAGE_ICON,
         cxSmall,
         cySmall,
         LR_DEFAULTCOLOR
-    );
+    ));
 
     if (!g_appIcon) {
         g_appIcon = LoadIconW(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
@@ -69,11 +68,15 @@ void InitTray(HWND hwnd, HINSTANCE hInstance) {
     Shell_NotifyIcon(NIM_ADD, &g_nid);
 }
 
+static bool s_zoomTimerArmed = false;
+
 void StartZoomTimer() {
-    if (g_hwndOverlay) SetTimer(g_hwndOverlay, 1, 14, NULL);
+    if (!g_hwndOverlay || s_zoomTimerArmed) return;
+    s_zoomTimerArmed = SetTimer(g_hwndOverlay, 1, 14, NULL) != 0;
 }
 
 void StopZoomTimer() {
+    s_zoomTimerArmed = false;
     ProcessOverlayFrame();
     if (g_hwndOverlay) KillTimer(g_hwndOverlay, 1);
 }
@@ -82,6 +85,12 @@ bool RequiresZoomTimer() {
     if (g_isDrawingLine || g_isDrawingArrow || g_isDrawRectangle || g_isDrawingHighlight || g_isDrawingBlur) return true;
     if (fabsf(g_currentZoom - g_targetZoom) > 0.001f) return true;
     return false;
+}
+
+static LONG WINAPI UnhandledExceptionCleanup(EXCEPTION_POINTERS* pExceptionInfo) {
+    (void)pExceptionInfo;
+    MagSetFullscreenTransform(1.0f, 0, 0);
+    return EXCEPTION_CONTINUE_SEARCH;
 }
 
 int APIENTRY WinMain(
@@ -101,7 +110,6 @@ int APIENTRY WinMain(
             PostMessageW(hExisting, WM_APP_SHOWSETTINGS, 0, 0);
         }
         if (hSingleInstanceMutex) {
-            ReleaseMutex(hSingleInstanceMutex);
             CloseHandle(hSingleInstanceMutex);
         }
         return 0;
@@ -124,6 +132,7 @@ int APIENTRY WinMain(
     }
 
     MagShowSystemCursor(TRUE);
+    SetUnhandledExceptionFilter(UnhandledExceptionCleanup);
 
     HMODULE hMag = GetModuleHandle(L"magnification.dll");
     if (hMag) {
@@ -131,7 +140,7 @@ int APIENTRY WinMain(
         if (pSetSmoothing) pSetSmoothing(TRUE);
     }
 
-    WNDCLASSEX wcOverlay = { sizeof(WNDCLASSEX), 0, OverlayWndProc, 0, 0, hInstance, g_appIcon, NULL, (HBRUSH)GetStockObject(BLACK_BRUSH), NULL, L"LensItOverlay", g_appIcon };
+    WNDCLASSEX wcOverlay = { sizeof(WNDCLASSEX), 0, OverlayWndProc, 0, 0, hInstance, g_appIcon, NULL, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)), NULL, L"LensItOverlay", g_appIcon };
     RegisterClassEx(&wcOverlay);
 
     WNDCLASSEX wcSettings = { sizeof(WNDCLASSEX), 0, SettingsWndProc, 0, 0, hInstance, g_appIcon, LoadCursor(NULL, IDC_ARROW), NULL, NULL, L"LensItSettings", g_appIcon };
@@ -175,23 +184,30 @@ int APIENTRY WinMain(
         ShowWelcomeWindow(hInstance);
     }
 
-    g_kbdHook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, hInstance, 0);
-    g_mouseHook = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, hInstance, 0);
+    {
+        UniqueHook kbdHook(SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, hInstance, 0));
+        UniqueHook mouseHook(SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, hInstance, 0));
 
-    MSG msg;
-    while (GetMessage(&msg, NULL, 0, 0)) {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
+        MSG msg;
+        while (GetMessage(&msg, NULL, 0, 0)) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
     }
 
     Shell_NotifyIcon(NIM_DELETE, &g_nid);
-    if (g_kbdHook) UnhookWindowsHookEx(g_kbdHook);
-    if (g_mouseHook) UnhookWindowsHookEx(g_mouseHook);
 
     if (g_hwndToast) DestroyWindow(g_hwndToast);
+    if (g_hwndSettings) DestroyWindow(g_hwndSettings);
+    if (g_hwndOverlay) DestroyWindow(g_hwndOverlay);
+    g_hwndSettings = NULL;
+    g_hwndOverlay = NULL;
     DestroyOverlayBackbuffer();
     MagSetFullscreenTransform(1.0f, 0, 0);
     MagUninitialize();
+    g_strokes.clear();
+    g_currentStroke = Stroke();
+    g_textDraft = Stroke();
     GdiplusShutdown(gdiplusToken);
     if (SUCCEEDED(hrCo)) CoUninitialize();
     if (g_appIcon) DestroyIcon(g_appIcon);

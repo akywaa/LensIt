@@ -24,10 +24,17 @@ bool IsRectKeyPressed() {
     return (GetAsyncKeyState(g_config.rectKey) < 0);
 }
 
+static bool s_xbutton1Physical = false;
+static bool s_xbutton2Physical = false;
+static bool s_middlePhysical = false;
+static bool s_swallowMiddleUp = false;
+static bool s_swallowXButton1Up = false;
+static bool s_swallowXButton2Up = false;
+
 static bool IsTriggerPhysicallyPressed() {
-    if (g_config.triggerKey == VK_XBUTTON1) return (GetAsyncKeyState(VK_XBUTTON1) & 0x8000) != 0;
-    if (g_config.triggerKey == VK_XBUTTON2) return (GetAsyncKeyState(VK_XBUTTON2) & 0x8000) != 0;
-    if (g_config.triggerKey == VK_MBUTTON)  return (GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0;
+    if (g_config.triggerKey == VK_XBUTTON1) return s_xbutton1Physical;
+    if (g_config.triggerKey == VK_XBUTTON2) return s_xbutton2Physical;
+    if (g_config.triggerKey == VK_MBUTTON)  return s_middlePhysical;
 
     if (g_config.triggerKey == VK_MENU || g_config.triggerKey == VK_LMENU || g_config.triggerKey == VK_RMENU) {
         return (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
@@ -41,13 +48,17 @@ static bool IsTriggerPhysicallyPressed() {
     return (GetAsyncKeyState(g_config.triggerKey) & 0x8000) != 0;
 }
 
+static bool IsModifierKey(DWORD vk) {
+    return vk == VK_SHIFT || vk == VK_LSHIFT || vk == VK_RSHIFT ||
+        vk == VK_CONTROL || vk == VK_LCONTROL || vk == VK_RCONTROL ||
+        vk == VK_MENU || vk == VK_LMENU || vk == VK_RMENU ||
+        vk == VK_LWIN || vk == VK_RWIN;
+}
+
 static bool IsTextInputBlocker(DWORD vk) {
-    return vk == VK_LWIN || vk == VK_RWIN || vk == VK_LMENU || vk == VK_RMENU ||
-        vk == VK_LCONTROL || vk == VK_RCONTROL || vk == VK_SHIFT || vk == VK_LSHIFT || vk == VK_RSHIFT ||
-        vk == VK_CAPITAL || vk == VK_NUMLOCK || vk == VK_SCROLL || vk == VK_TAB ||
-        vk == VK_INSERT || vk == VK_DELETE || vk == VK_HOME || vk == VK_END ||
-        vk == VK_PRIOR || vk == VK_NEXT || vk == VK_UP || vk == VK_DOWN ||
-        vk == VK_LEFT || vk == VK_RIGHT || vk == VK_BACK || vk == VK_ESCAPE;
+    return vk == VK_TAB || vk == VK_INSERT || vk == VK_DELETE ||
+        vk == VK_HOME || vk == VK_END || vk == VK_PRIOR || vk == VK_NEXT ||
+        vk == VK_UP || vk == VK_DOWN || vk == VK_LEFT || vk == VK_RIGHT;
 }
 
 void CommitTextInput() {
@@ -170,16 +181,24 @@ static void HandleTriggerRelease() {
 
 LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION) {
-        KBDLLHOOKSTRUCT* p = (KBDLLHOOKSTRUCT*)lParam;
+        KBDLLHOOKSTRUCT* p = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
         bool isDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
 
-        if (p->vkCode == VK_TAB || p->vkCode == VK_LWIN || p->vkCode == VK_RWIN) {
+        if (p->vkCode == VK_TAB) {
+            if (g_isTriggerHeld) {
+                HandleTriggerRelease();
+            }
+        }
+        else if (p->vkCode == VK_LWIN || p->vkCode == VK_RWIN) {
             if (g_isTriggerHeld && !IsTriggerPhysicallyPressed()) {
                 HandleTriggerRelease();
             }
         }
 
         if (!isDown && !IsKeyMatching(p->vkCode, g_config.triggerKey)) {
+            if (IsModifierKey(p->vkCode)) {
+                return CallNextHookEx(nullptr, nCode, wParam, lParam);
+            }
             bool blockAllKeyups = g_isTextInputActive || g_bindingMode != BindingMode::None || g_isBreakTimerEditing;
             bool consumedByTimer = g_isBreakTimerActive && !g_isBreakTimerEditing &&
                 (p->vkCode == VK_ESCAPE || p->vkCode == VK_SPACE ||
@@ -188,7 +207,7 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
             if (blockAllKeyups || consumedByTimer) {
                 return 1;
             }
-            return CallNextHookEx(g_kbdHook, nCode, wParam, lParam);
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
         }
 
         if (g_keycastEnabled && isDown && !g_isBreakTimerActive && !g_isTextInputActive && g_bindingMode == BindingMode::None) {
@@ -218,14 +237,14 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
                         scan |= KF_EXTENDED; break;
                     }
                     wchar_t keyName[32] = { 0 };
-                    GetKeyNameTextW((LONG)(scan << 16), keyName, 32);
+                    GetKeyNameTextW(static_cast<LONG>(scan << 16), keyName, 32);
                     if (keyName[0]) parts.push_back(keyName);
-                    else if (p->vkCode >= '0' && p->vkCode <= '9') parts.push_back(std::wstring(1, (wchar_t)p->vkCode));
-                    else if (p->vkCode >= 'A' && p->vkCode <= 'Z') parts.push_back(std::wstring(1, (wchar_t)p->vkCode));
+                    else if (p->vkCode >= '0' && p->vkCode <= '9') parts.push_back(std::wstring(1, static_cast<wchar_t>(p->vkCode)));
+                    else if (p->vkCode >= 'A' && p->vkCode <= 'Z') parts.push_back(std::wstring(1, static_cast<wchar_t>(p->vkCode)));
                     else parts.push_back(L"Key " + std::to_wstring(p->vkCode));
                 }
 
-                if (parts.size() >= 2) {
+                if (!isModKey && parts.size() >= 2) {
                     std::wstring combo;
                     for (size_t i = 0; i < parts.size(); ++i) {
                         if (i) combo += L" + ";
@@ -234,7 +253,7 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
                     g_keycastTextValue = combo;
                     g_keycastText = true;
                     g_keycastUntilTick = GetTickCount64() + 1500;
-                    StartZoomTimer();
+                    RedrawOverlay();
                 }
             }
         }
@@ -262,7 +281,7 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
                 wchar_t ch = 0;
                 if (p->vkCode >= VK_NUMPAD0 && p->vkCode <= VK_NUMPAD9) {
-                    ch = (wchar_t)(L'0' + (p->vkCode - VK_NUMPAD0));
+                    ch = static_cast<wchar_t>(L'0' + (p->vkCode - VK_NUMPAD0));
                 }
                 else {
                     BYTE kbState[256] = { 0 };
@@ -290,7 +309,7 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
             }
 
             if (!isDown) {
-                return CallNextHookEx(g_kbdHook, nCode, wParam, lParam);
+                return CallNextHookEx(nullptr, nCode, wParam, lParam);
             }
 
             if (p->vkCode == VK_ESCAPE) {
@@ -310,18 +329,22 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
             if (p->vkCode == VK_UP || p->vkCode == VK_RIGHT) {
                 g_breakTimerRemainingSec += step;
                 if (g_breakTimerRemainingSec > 5999) g_breakTimerRemainingSec = 5999;
-                g_breakTimerTotalSec = max(g_breakTimerTotalSec, g_breakTimerRemainingSec);
+                g_breakTimerTotalSec = std::max(g_breakTimerTotalSec, g_breakTimerRemainingSec);
                 RedrawOverlay();
                 return 1;
             }
             if (p->vkCode == VK_DOWN || p->vkCode == VK_LEFT) {
-                g_breakTimerRemainingSec = max(5, g_breakTimerRemainingSec - step);
+                g_breakTimerRemainingSec = std::max(5, g_breakTimerRemainingSec - step);
                 RedrawOverlay();
                 return 1;
             }
         }
 
-        if (g_isTextInputActive && isDown && !IsKeyMatching(p->vkCode, g_config.triggerKey)) {            if (p->vkCode == VK_RETURN) {
+        if (g_isTextInputActive && isDown && !IsKeyMatching(p->vkCode, g_config.triggerKey)) {
+            if (IsModifierKey(p->vkCode)) {
+                return CallNextHookEx(nullptr, nCode, wParam, lParam);
+            }
+            if (p->vkCode == VK_RETURN) {
                 CommitTextInput();
                 return 1;
             }
@@ -434,6 +457,7 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
                     return 1;
                 }
                 if (g_persistentDrawingsActive) {
+                    ShowNotification(L"Pin Mode", L"Drawings are pinned. Unpin with P.", RGB(250, 205, 40));
                     return 1;
                 }
                 g_targetZoom = 1.0f;
@@ -469,9 +493,8 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
                 if (IsRectKeyPressed()) {
                     StartCropSelection();
                 }
-                else {
-                    CopyScreenshotToClipboard();
-                    ShowNotification(L"Screenshot", L"Copied to clipboard!", RGB(46, 204, 113));
+                else if (g_hwndOverlay) {
+                    PostMessageW(g_hwndOverlay, WM_APP_TAKE_SCREENSHOT, 0, 0);
                 }
                 return 1;
             }
@@ -545,14 +568,55 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
             }
         }
     }
-    return CallNextHookEx(g_kbdHook, nCode, wParam, lParam);
+    return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }
-
-extern std::shared_ptr<Bitmap> BakeBlurredBitmap(RECT rc);
 
 LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION) {
-        MSLLHOOKSTRUCT* pMouse = (MSLLHOOKSTRUCT*)lParam;
+        MSLLHOOKSTRUCT* pMouse = reinterpret_cast<MSLLHOOKSTRUCT*>(lParam);
+
+        if (wParam == WM_MOUSEMOVE) {
+            static bool s_haveLastMovePt = false;
+            static POINT s_lastMovePt = { 0, 0 };
+            if (s_haveLastMovePt && pMouse->pt.x == s_lastMovePt.x && pMouse->pt.y == s_lastMovePt.y) {
+                return CallNextHookEx(nullptr, nCode, wParam, lParam);
+            }
+            s_haveLastMovePt = true;
+            s_lastMovePt = pMouse->pt;
+        }
+
+        if (wParam == WM_XBUTTONDOWN || wParam == WM_NCXBUTTONDOWN) {
+            const WORD button = HIWORD(pMouse->mouseData);
+            if (button == XBUTTON1) s_xbutton1Physical = true;
+            else if (button == XBUTTON2) s_xbutton2Physical = true;
+        }
+        else if (wParam == WM_XBUTTONUP || wParam == WM_NCXBUTTONUP) {
+            const WORD button = HIWORD(pMouse->mouseData);
+            if (button == XBUTTON1) s_xbutton1Physical = false;
+            else if (button == XBUTTON2) s_xbutton2Physical = false;
+        }
+        else if (wParam == WM_MBUTTONDOWN) {
+            s_middlePhysical = true;
+        }
+        else if (wParam == WM_MBUTTONUP) {
+            s_middlePhysical = false;
+        }
+
+        if (wParam == WM_MBUTTONUP && s_swallowMiddleUp) {
+            s_swallowMiddleUp = false;
+            return 1;
+        }
+        if (wParam == WM_XBUTTONUP || wParam == WM_NCXBUTTONUP) {
+            const WORD button = HIWORD(pMouse->mouseData);
+            if (button == XBUTTON1 && s_swallowXButton1Up) {
+                s_swallowXButton1Up = false;
+                return 1;
+            }
+            if (button == XBUTTON2 && s_swallowXButton2Up) {
+                s_swallowXButton2Up = false;
+                return 1;
+            }
+        }
 
         if (g_isTriggerHeld && !IsTriggerPhysicallyPressed()) {
             HandleTriggerRelease();
@@ -596,7 +660,7 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
                 g_breakTimerRemainingSec += step;
                 if (g_breakTimerRemainingSec < 5) g_breakTimerRemainingSec = 5;
                 if (g_breakTimerRemainingSec > 5999) g_breakTimerRemainingSec = 5999;
-                g_breakTimerTotalSec = max(g_breakTimerTotalSec, g_breakTimerRemainingSec);
+                g_breakTimerTotalSec = std::max(g_breakTimerTotalSec, g_breakTimerRemainingSec);
                 RedrawOverlay();
                 return 1;
             }
@@ -619,6 +683,9 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
                 else if (g_bindingMode == BindingMode::RectKey) {
                     g_config.rectKey = pressedVk;
                 }
+                if (pressedVk == VK_MBUTTON) s_swallowMiddleUp = true;
+                else if (pressedVk == VK_XBUTTON1) s_swallowXButton1Up = true;
+                else if (pressedVk == VK_XBUTTON2) s_swallowXButton2Up = true;
                 g_bindingMode = BindingMode::None;
                 SaveConfig();
                 if (g_hwndSettings) InvalidateRect(g_hwndSettings, NULL, FALSE);
@@ -634,7 +701,7 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
                     RedrawOverlay();
                     return 1;
                 }
-                return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
+                return CallNextHookEx(nullptr, nCode, wParam, lParam);
             }
             if (wParam == WM_LBUTTONDOWN) {
                 SetCursor(LoadCursor(NULL, IDC_CROSS));
@@ -648,10 +715,10 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
                 g_cropDragging = false;
                 g_cropMode = false;
                 SetCursor(LoadCursor(NULL, IDC_ARROW));
-                int l = min(g_cropStart.x, g_cropEnd.x);
-                int t = min(g_cropStart.y, g_cropEnd.y);
-                int r = max(g_cropStart.x, g_cropEnd.x);
-                int b = max(g_cropStart.y, g_cropEnd.y);
+                int l = std::min(g_cropStart.x, g_cropEnd.x);
+                int t = std::min(g_cropStart.y, g_cropEnd.y);
+                int r = std::max(g_cropStart.x, g_cropEnd.x);
+                int b = std::max(g_cropStart.y, g_cropEnd.y);
                 if (r - l >= 4 && b - t >= 4) {
                     RECT rc = { l, t, r, b };
                     CopyRegionToClipboard(rc);
@@ -706,6 +773,7 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
                 badge.badgeNumber = g_stepCounter++;
                 if (g_laserMode) badge.birthTick = GetTickCount64();
                 g_strokes.push_back(badge);
+                s_swallowMiddleUp = true;
                 RedrawOverlay();
                 return 1;
             }
@@ -750,25 +818,42 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
                     int dx = pMouse->pt.x - last.x;
                     int dy = pMouse->pt.y - last.y;
                     if (dx * dx + dy * dy < 9) {
-                        return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
+                        return CallNextHookEx(nullptr, nCode, wParam, lParam);
                     }
                 }
 
+                const bool rectKeyPressed = IsRectKeyPressed();
                 POINT np = pMouse->pt;
-                if ((g_isDrawingLine || g_isDrawingArrow) && !g_currentStroke.points.empty() && IsRectKeyPressed()) {
+                if ((g_isDrawingLine || g_isDrawingArrow) && !g_currentStroke.points.empty() && rectKeyPressed) {
                     POINT first = g_currentStroke.points.front();
-                    float fdx = (float)(np.x - first.x);
-                    float fdy = (float)(np.y - first.y);
+                    float fdx = static_cast<float>(np.x - first.x);
+                    float fdy = static_cast<float>(np.y - first.y);
                     float dist = sqrtf(fdx * fdx + fdy * fdy);
                     if (dist > 1.0f) {
                         float angle = atan2f(fdy, fdx);
                         float snap = roundf(angle / (3.14159265f / 4.0f)) * (3.14159265f / 4.0f);
-                        np.x = first.x + (LONG)(dist * cosf(snap));
-                        np.y = first.y + (LONG)(dist * sinf(snap));
+                        np.x = first.x + static_cast<LONG>(dist * cosf(snap));
+                        np.y = first.y + static_cast<LONG>(dist * sinf(snap));
                     }
                 }
 
-                g_currentStroke.points.push_back(np);
+                const bool snapLine = rectKeyPressed && (g_isDrawingLine || g_isDrawingArrow);
+                if (snapLine) {
+                    if (g_currentStroke.points.size() >= 2) {
+                        g_currentStroke.points.resize(2);
+                        g_currentStroke.points[1] = np;
+                    }
+                    else {
+                        g_currentStroke.points.push_back(np);
+                    }
+                }
+                else if (g_currentStroke.points.size() > 1 &&
+                         (g_isDrawRectangle || g_isDrawingBlur || g_isDrawingHighlight)) {
+                    g_currentStroke.points.back() = np;
+                }
+                else {
+                    g_currentStroke.points.push_back(np);
+                }
                 StartZoomTimer();
             }
 
@@ -786,10 +871,10 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
                     if (wasBlur) {
                         POINT a = g_currentStroke.points.front();
                         POINT b = g_currentStroke.points.back();
-                        RECT rc = { min(a.x, b.x), min(a.y, b.y), max(a.x, b.x), max(a.y, b.y) };
+                        RECT rc = { std::min(a.x, b.x), std::min(a.y, b.y), std::max(a.x, b.x), std::max(a.y, b.y) };
                         if ((rc.right - rc.left) >= 8 && (rc.bottom - rc.top) >= 8) {
                             g_currentStroke.cachedRect = rc;
-                            g_currentStroke.cachedBitmap = BakeBlurredBitmap(rc);
+                            g_currentStroke.cachedBitmap = nullptr;
                             g_strokes.push_back(g_currentStroke);
                         }
                     }
@@ -805,5 +890,5 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
             }
         }
     }
-    return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
+    return CallNextHookEx(nullptr, nCode, wParam, lParam);
 }

@@ -1,5 +1,6 @@
 #pragma once
 #define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #define GDIPVER 0x0110
 
 #ifndef WDA_EXCLUDEFROMCAPTURE
@@ -36,6 +37,7 @@ using namespace Gdiplus;
 
 #define WM_APP_TRAYMSG        (WM_APP + 1)
 #define WM_APP_SHOWSETTINGS   (WM_APP + 2)
+#define WM_APP_TAKE_SCREENSHOT (WM_APP + 3)
 #define ID_TRAY_SETTINGS      2001
 #define ID_TRAY_EXIT          2002
 
@@ -75,8 +77,6 @@ extern AppConfig g_config;
 extern HWND g_hwndOverlay;
 extern HWND g_hwndSettings;
 extern HWND g_hwndToast;
-extern HHOOK g_kbdHook;
-extern HHOOK g_mouseHook;
 extern bool g_isTriggerHeld;
 extern bool g_isDrawingLine;
 extern bool g_isDrawingArrow;

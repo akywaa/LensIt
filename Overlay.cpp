@@ -1,9 +1,14 @@
 #include "LensIt.h"
+#include "WinHandles.h"
+
+#include <filesystem>
+#include <fstream>
+#include <map>
+#include <string_view>
+#include <shlobj.h>
+#include <knownfolders.h>
 
 UINT WM_TASKBARCREATED = 0;
-
-static char g_configBuf[MAX_PATH];
-static bool g_configPathReady = false;
 
 static HDC g_memDC = NULL;
 static HBITMAP g_memBitmap = NULL;
@@ -21,6 +26,13 @@ static int s_toastHoldFrames = 0;
 static const int TOAST_W = 270;
 static const int TOAST_H = 68;
 
+static const ULONGLONG KEYCAST_FADE_IN_MS = 180;
+static const ULONGLONG KEYCAST_FADE_OUT_MS = 240;
+static const int KEYCAST_TOAST_GAP = 12;
+
+static float s_keycastAlpha = 0.0f;
+static ULONGLONG s_keycastShownTick = 0;
+
 static bool s_framePending = false;
 
 bool g_keycastText = false;
@@ -35,66 +47,110 @@ bool g_isBreakTimerEditing = false;
 int g_breakTimerTotalSec = 300;
 int g_breakTimerRemainingSec = 300;
 std::wstring g_breakTimerInputStr;
+static float s_breakTimerCenterX = 0.0f;
+static float s_breakTimerCenterY = 0.0f;
 
 void DrawStroke(Graphics& g, const Stroke& stroke, int offX, int offY);
+std::shared_ptr<Bitmap> BakeBlurredBitmap(RECT rc);
+static void ComputeBreakTimerCenter(float& cx, float& cy);
+static POINT ToastAnchor();
 
-static void EnsureConfigPath() {
-    if (g_configPathReady) return;
-    GetModuleFileNameA(NULL, g_configBuf, MAX_PATH);
-    char* p = strrchr(g_configBuf, '\\');
-    if (p) *p = '\0';
-    strcat_s(g_configBuf, MAX_PATH, "\\config.ini");
-    g_configPathReady = true;
+namespace {
+
+constexpr const char* kConfigFileName = "config.ini";
+
+std::filesystem::path WritableConfigPath(const std::filesystem::path& portablePath) {
+    std::ofstream probe(portablePath, std::ios::app);
+    if (probe.is_open()) return portablePath;
+
+    PWSTR appData = nullptr;
+    if (FAILED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr, &appData))) {
+        return portablePath;
+    }
+
+    std::filesystem::path directory = std::filesystem::path(appData) / L"LensIt";
+    CoTaskMemFree(appData);
+
+    std::error_code ec;
+    std::filesystem::create_directories(directory, ec);
+    return directory / kConfigFileName;
+}
+
+std::filesystem::path ConfigPath() {
+    wchar_t buffer[MAX_PATH] = {};
+    GetModuleFileNameW(nullptr, buffer, MAX_PATH);
+    return WritableConfigPath(std::filesystem::path(buffer).parent_path() / kConfigFileName);
+}
+
+std::map<std::string, long long> ReadConfigValues() {
+    std::map<std::string, long long> values;
+    std::ifstream file(ConfigPath());
+    std::string line;
+    while (std::getline(file, line)) {
+        std::string_view view(line);
+        const size_t firstNonSpace = view.find_first_not_of(" \t\r");
+        if (firstNonSpace == std::string_view::npos) continue;
+        view.remove_prefix(firstNonSpace);
+        if (view.front() == '#' || view.front() == ';' || view.front() == '[') continue;
+
+        const size_t separator = view.find('=');
+        if (separator == std::string_view::npos) continue;
+
+        std::string_view key = view.substr(0, separator);
+        std::string_view value = view.substr(separator + 1);
+        while (!key.empty() && (key.back() == ' ' || key.back() == '\t')) key.remove_suffix(1);
+        while (!value.empty() && (value.front() == ' ' || value.front() == '\t')) value.remove_prefix(1);
+
+        try {
+            values[std::string(key)] = std::stoll(std::string(value));
+        }
+        catch (const std::exception&) {
+        }
+    }
+    return values;
+}
+
+long long ConfigValue(const std::map<std::string, long long>& values, const char* key, long long fallback) {
+    const auto it = values.find(key);
+    return (it == values.end()) ? fallback : it->second;
+}
+
 }
 
 void LoadConfig() {
-    EnsureConfigPath();
-    g_config.triggerKey = (DWORD)GetPrivateProfileIntA("Config", "TriggerKey", (int)g_config.triggerKey, g_configBuf);
-    g_config.rectKey = (DWORD)GetPrivateProfileIntA("Config", "RectKey", (int)g_config.rectKey, g_configBuf);
-    g_config.lineColor = (COLORREF)GetPrivateProfileIntA("Config", "LineColor", (int)g_config.lineColor, g_configBuf);
-    g_config.lineWidth = (int)GetPrivateProfileIntA("Config", "LineWidth", g_config.lineWidth, g_configBuf);
-    g_config.arrowColor = (COLORREF)GetPrivateProfileIntA("Config", "ArrowColor", (int)g_config.arrowColor, g_configBuf);
-    g_config.arrowWidth = (int)GetPrivateProfileIntA("Config", "ArrowWidth", g_config.arrowWidth, g_configBuf);
-    g_config.rectColor = (COLORREF)GetPrivateProfileIntA("Config", "RectColor", (int)g_config.rectColor, g_configBuf);
-    g_config.rectWidth = (int)GetPrivateProfileIntA("Config", "RectWidth", g_config.rectWidth, g_configBuf);
-    g_config.badgeColor = (COLORREF)GetPrivateProfileIntA("Config", "BadgeColor", (int)g_config.badgeColor, g_configBuf);
-    g_config.resetZoomOnRelease = GetPrivateProfileIntA("Config", "ResetZoomOnRelease", g_config.resetZoomOnRelease ? 1 : 0, g_configBuf) != 0;
-    g_config.keepDrawingsOnRelease = GetPrivateProfileIntA("Config", "KeepDrawingsOnRelease", g_config.keepDrawingsOnRelease ? 1 : 0, g_configBuf) != 0;
-    g_config.hideToastsFromCapture = GetPrivateProfileIntA("Config", "HideToastsFromCapture", g_config.hideToastsFromCapture ? 1 : 0, g_configBuf) != 0;
-    g_config.isFirstRun = GetPrivateProfileIntA("Config", "FirstRun", 1, g_configBuf) != 0;
+    const std::map<std::string, long long> values = ReadConfigValues();
+    g_config.triggerKey = static_cast<DWORD>(ConfigValue(values, "TriggerKey", static_cast<int>(g_config.triggerKey)));
+    g_config.rectKey = static_cast<DWORD>(ConfigValue(values, "RectKey", static_cast<int>(g_config.rectKey)));
+    g_config.lineColor = static_cast<COLORREF>(ConfigValue(values, "LineColor", static_cast<int>(g_config.lineColor)));
+    g_config.lineWidth = static_cast<int>(ConfigValue(values, "LineWidth", g_config.lineWidth));
+    g_config.arrowColor = static_cast<COLORREF>(ConfigValue(values, "ArrowColor", static_cast<int>(g_config.arrowColor)));
+    g_config.arrowWidth = static_cast<int>(ConfigValue(values, "ArrowWidth", g_config.arrowWidth));
+    g_config.rectColor = static_cast<COLORREF>(ConfigValue(values, "RectColor", static_cast<int>(g_config.rectColor)));
+    g_config.rectWidth = static_cast<int>(ConfigValue(values, "RectWidth", g_config.rectWidth));
+    g_config.badgeColor = static_cast<COLORREF>(ConfigValue(values, "BadgeColor", static_cast<int>(g_config.badgeColor)));
+    g_config.resetZoomOnRelease = ConfigValue(values, "ResetZoomOnRelease", g_config.resetZoomOnRelease ? 1 : 0) != 0;
+    g_config.keepDrawingsOnRelease = ConfigValue(values, "KeepDrawingsOnRelease", g_config.keepDrawingsOnRelease ? 1 : 0) != 0;
+    g_config.hideToastsFromCapture = ConfigValue(values, "HideToastsFromCapture", g_config.hideToastsFromCapture ? 1 : 0) != 0;
+    g_config.isFirstRun = ConfigValue(values, "FirstRun", 1) != 0;
 }
 
 void SaveConfig() {
-    EnsureConfigPath();
-    char buf[64];
-    snprintf(buf, sizeof(buf), "%lu", (unsigned long)g_config.triggerKey);
-    WritePrivateProfileStringA("Config", "TriggerKey", buf, g_configBuf);
-    snprintf(buf, sizeof(buf), "%lu", (unsigned long)g_config.rectKey);
-    WritePrivateProfileStringA("Config", "RectKey", buf, g_configBuf);
-    snprintf(buf, sizeof(buf), "%lu", (unsigned long)g_config.lineColor);
-    WritePrivateProfileStringA("Config", "LineColor", buf, g_configBuf);
-    snprintf(buf, sizeof(buf), "%d", g_config.lineWidth);
-    WritePrivateProfileStringA("Config", "LineWidth", buf, g_configBuf);
-    snprintf(buf, sizeof(buf), "%lu", (unsigned long)g_config.arrowColor);
-    WritePrivateProfileStringA("Config", "ArrowColor", buf, g_configBuf);
-    snprintf(buf, sizeof(buf), "%d", g_config.arrowWidth);
-    WritePrivateProfileStringA("Config", "ArrowWidth", buf, g_configBuf);
-    snprintf(buf, sizeof(buf), "%lu", (unsigned long)g_config.rectColor);
-    WritePrivateProfileStringA("Config", "RectColor", buf, g_configBuf);
-    snprintf(buf, sizeof(buf), "%d", g_config.rectWidth);
-    WritePrivateProfileStringA("Config", "RectWidth", buf, g_configBuf);
-    snprintf(buf, sizeof(buf), "%lu", (unsigned long)g_config.badgeColor);
-    WritePrivateProfileStringA("Config", "BadgeColor", buf, g_configBuf);
-    snprintf(buf, sizeof(buf), "%d", g_config.resetZoomOnRelease ? 1 : 0);
-    WritePrivateProfileStringA("Config", "ResetZoomOnRelease", buf, g_configBuf);
-    snprintf(buf, sizeof(buf), "%d", g_config.keepDrawingsOnRelease ? 1 : 0);
-    WritePrivateProfileStringA("Config", "KeepDrawingsOnRelease", buf, g_configBuf);
-    snprintf(buf, sizeof(buf), "%d", g_config.hideToastsFromCapture ? 1 : 0);
-    WritePrivateProfileStringA("Config", "HideToastsFromCapture", buf, g_configBuf);
-    snprintf(buf, sizeof(buf), "%d", g_config.isFirstRun ? 1 : 0);
-    WritePrivateProfileStringA("Config", "FirstRun", buf, g_configBuf);
+    std::ofstream file(ConfigPath(), std::ios::trunc);
+    if (!file) return;
 
-    WritePrivateProfileStringA(NULL, NULL, NULL, g_configBuf);
+    file << "TriggerKey=" << g_config.triggerKey << '\n';
+    file << "RectKey=" << g_config.rectKey << '\n';
+    file << "LineColor=" << g_config.lineColor << '\n';
+    file << "LineWidth=" << g_config.lineWidth << '\n';
+    file << "ArrowColor=" << g_config.arrowColor << '\n';
+    file << "ArrowWidth=" << g_config.arrowWidth << '\n';
+    file << "RectColor=" << g_config.rectColor << '\n';
+    file << "RectWidth=" << g_config.rectWidth << '\n';
+    file << "BadgeColor=" << g_config.badgeColor << '\n';
+    file << "ResetZoomOnRelease=" << (g_config.resetZoomOnRelease ? 1 : 0) << '\n';
+    file << "KeepDrawingsOnRelease=" << (g_config.keepDrawingsOnRelease ? 1 : 0) << '\n';
+    file << "HideToastsFromCapture=" << (g_config.hideToastsFromCapture ? 1 : 0) << '\n';
+    file << "FirstRun=" << (g_config.isFirstRun ? 1 : 0) << '\n';
 }
 
 static bool ParseTimerString(const std::wstring& s, int& outSec) {
@@ -130,6 +186,7 @@ void StartBreakTimer(int minutes) {
     g_isBreakTimerPaused = false;
     g_isBreakTimerEditing = false;
     g_breakTimerInputStr.clear();
+    ComputeBreakTimerCenter(s_breakTimerCenterX, s_breakTimerCenterY);
 
     if (g_hwndOverlay) {
         SetTimer(g_hwndOverlay, 2, 1000, NULL);
@@ -180,7 +237,7 @@ void CommitBreakTimerInput() {
     RedrawOverlay();
 }
 
-void GetBreakTimerCenter(float& cx, float& cy) {
+static void ComputeBreakTimerCenter(float& cx, float& cy) {
     int vScreenX = GetSystemMetrics(SM_XVIRTUALSCREEN);
     int vScreenY = GetSystemMetrics(SM_YVIRTUALSCREEN);
     POINT pt;
@@ -191,8 +248,13 @@ void GetBreakTimerCenter(float& cx, float& cy) {
         cy = GetSystemMetrics(SM_CYVIRTUALSCREEN) / 2.0f;
         return;
     }
-    cx = ((mi.rcMonitor.left + mi.rcMonitor.right) / 2.0f) - (float)vScreenX;
-    cy = ((mi.rcMonitor.top + mi.rcMonitor.bottom) / 2.0f) - (float)vScreenY;
+    cx = ((mi.rcMonitor.left + mi.rcMonitor.right) / 2.0f) - static_cast<float>(vScreenX);
+    cy = ((mi.rcMonitor.top + mi.rcMonitor.bottom) / 2.0f) - static_cast<float>(vScreenY);
+}
+
+void GetBreakTimerCenter(float& cx, float& cy) {
+    cx = s_breakTimerCenterX;
+    cy = s_breakTimerCenterY;
 }
 
 static void DrawBreakTimerUI(Graphics& g, int w, int h) {
@@ -213,7 +275,7 @@ static void DrawBreakTimerUI(Graphics& g, int w, int h) {
 
     float totalW = 340.0f;
     float barH = 6.0f;
-    float progress = (g_breakTimerTotalSec > 0) ? ((float)g_breakTimerRemainingSec / (float)g_breakTimerTotalSec) : 0.0f;
+    float progress = (g_breakTimerTotalSec > 0) ? (static_cast<float>(g_breakTimerRemainingSec) / static_cast<float>(g_breakTimerTotalSec)) : 0.0f;
     if (progress < 0.0f) progress = 0.0f;
     if (progress > 1.0f) progress = 1.0f;
 
@@ -299,14 +361,14 @@ void CreateOverlayBackbuffer() {
     bmi.bmiHeader.biBitCount = 32;
     bmi.bmiHeader.biCompression = BI_RGB;
 
-    HDC screenDC = GetDC(NULL);
+    ScopedScreenDC screenDC;
     if (!screenDC) return;
 
-    g_memDC = CreateCompatibleDC(screenDC);
+    g_memDC = CreateCompatibleDC(screenDC.get());
     if (g_memDC) {
-        g_memBitmap = CreateDIBSection(screenDC, &bmi, DIB_RGB_COLORS, &g_dibBits, NULL, 0);
+        g_memBitmap = CreateDIBSection(screenDC.get(), &bmi, DIB_RGB_COLORS, &g_dibBits, NULL, 0);
         if (g_memBitmap) {
-            g_oldBitmap = (HBITMAP)SelectObject(g_memDC, g_memBitmap);
+            g_oldBitmap = static_cast<HBITMAP>(SelectObject(g_memDC, g_memBitmap));
         }
         else {
             DeleteDC(g_memDC);
@@ -314,7 +376,40 @@ void CreateOverlayBackbuffer() {
             g_dibBits = NULL;
         }
     }
-    ReleaseDC(NULL, screenDC);
+}
+
+static void AddRoundedRectPath(GraphicsPath& path, REAL x, REAL y, REAL w, REAL h, REAL radius) {
+    const REAL r = std::min(radius, std::min(w, h) / 2.0f);
+    const REAL d = r * 2.0f;
+    path.AddArc(x, y, d, d, 180.0f, 90.0f);
+    path.AddArc(x + w - d, y, d, d, 270.0f, 90.0f);
+    path.AddArc(x + w - d, y + h - d, d, d, 0.0f, 90.0f);
+    path.AddArc(x, y + h - d, d, d, 90.0f, 90.0f);
+    path.CloseFigure();
+}
+
+static std::vector<std::wstring> SplitKeycastCombo(const std::wstring& combo) {
+    std::vector<std::wstring> parts;
+    size_t start = 0;
+    while (true) {
+        const size_t pos = combo.find(L" + ", start);
+        if (pos == std::wstring::npos) {
+            parts.push_back(combo.substr(start));
+            break;
+        }
+        parts.push_back(combo.substr(start, pos - start));
+        start = pos + 3;
+    }
+    return parts;
+}
+
+static bool IsModifierKeyName(const std::wstring& name) {
+    return name == L"Ctrl" || name == L"Alt" || name == L"Shift" || name == L"Win";
+}
+
+static Color WithFade(const Color& color, float alpha) {
+    const int a = std::clamp(static_cast<int>(static_cast<float>(color.GetA()) * alpha + 0.5f), 0, 255);
+    return Color(static_cast<BYTE>(a), color.GetR(), color.GetG(), color.GetB());
 }
 
 void PresentOverlayFrame() {
@@ -324,7 +419,7 @@ void PresentOverlayFrame() {
         if (!g_memDC || !g_dibBits) return;
     }
 
-    memset(g_dibBits, 0, (size_t)g_backStride * (size_t)g_backHeight);
+    memset(g_dibBits, 0, static_cast<size_t>(g_backStride) * static_cast<size_t>(g_backHeight));
 
     POINT curPt = s_cursorPos;
     {
@@ -336,17 +431,17 @@ void PresentOverlayFrame() {
     }
 
     {
-        Bitmap surface(g_backWidth, g_backHeight, g_backStride, PixelFormat32bppPARGB, (BYTE*)g_dibBits);
+        Bitmap surface(g_backWidth, g_backHeight, g_backStride, PixelFormat32bppPARGB, static_cast<BYTE*>(g_dibBits));
         Graphics g(&surface);
         g.SetSmoothingMode(SmoothingModeAntiAlias);
-        g.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
+        g.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
 
         if (g_spotlightMode) {
             GraphicsPath spotPath;
             spotPath.AddRectangle(Rect(0, 0, g_backWidth, g_backHeight));
             float r = 180.0f;
-            float cx = (float)(curPt.x - GetSystemMetrics(SM_XVIRTUALSCREEN));
-            float cy = (float)(curPt.y - GetSystemMetrics(SM_YVIRTUALSCREEN));
+            float cx = static_cast<float>(curPt.x - GetSystemMetrics(SM_XVIRTUALSCREEN));
+            float cy = static_cast<float>(curPt.y - GetSystemMetrics(SM_YVIRTUALSCREEN));
             spotPath.AddEllipse(cx - r, cy - r, r * 2.0f, r * 2.0f);
             spotPath.SetFillMode(FillModeAlternate);
             SolidBrush dimBrush(Color(180, 0, 0, 0));
@@ -380,17 +475,17 @@ void PresentOverlayFrame() {
             if (g_cropMode) {
                 SolidBrush dimCrop(Color(140, 0, 0, 0));
                 if (g_cropDragging) {
-                    int l = min(g_cropStart.x, g_cropEnd.x) - vScreenX;
-                    int t = min(g_cropStart.y, g_cropEnd.y) - vScreenY;
-                    int r = max(g_cropStart.x, g_cropEnd.x) - vScreenX;
-                    int b = max(g_cropStart.y, g_cropEnd.y) - vScreenY;
+                    int l = std::min(g_cropStart.x, g_cropEnd.x) - vScreenX;
+                    int t = std::min(g_cropStart.y, g_cropEnd.y) - vScreenY;
+                    int r = std::max(g_cropStart.x, g_cropEnd.x) - vScreenX;
+                    int b = std::max(g_cropStart.y, g_cropEnd.y) - vScreenY;
                     g.FillRectangle(&dimCrop, 0, 0, g_backWidth, t);
                     g.FillRectangle(&dimCrop, 0, b, g_backWidth, g_backHeight - b);
                     g.FillRectangle(&dimCrop, 0, t, l, b - t);
                     g.FillRectangle(&dimCrop, r, t, g_backWidth - r, b - t);
                     Pen cropPen(Color(255, 0, 160, 255), 1.5f);
                     cropPen.SetDashStyle(DashStyleDash);
-                    g.DrawRectangle(&cropPen, (REAL)l, (REAL)t, (REAL)(r - l), (REAL)(b - t));
+                    g.DrawRectangle(&cropPen, static_cast<REAL>(l), static_cast<REAL>(t), static_cast<REAL>(r - l), static_cast<REAL>(b - t));
                 }
                 else {
                     g.FillRectangle(&dimCrop, 0, 0, g_backWidth, g_backHeight);
@@ -399,39 +494,98 @@ void PresentOverlayFrame() {
         }
 
         if (g_keycastText) {
-            const int kw = 220, kh = 56;
-            int kx = g_backWidth - kw - 28;
-            int ky = g_backHeight - kh - 88;
+            const float capPadX = 7.0f;
+            const float capPadY = 4.0f;
+            const float capRadius = 8.0f;
+            const float plusWidth = 24.0f;
+            const float cardPadX = 13.0f;
+            const float cardPadY = 11.0f;
+            const float cardRadius = 16.0f;
+
+            Font fontKey(L"Segoe UI", 13.0f, FontStyleBold);
+            Font fontPlus(L"Segoe UI", 12.0f, FontStyleRegular);
+            StringFormat fmtKey;
+            fmtKey.SetAlignment(StringAlignmentCenter);
+            fmtKey.SetLineAlignment(StringAlignmentCenter);
+            StringFormat fmtMeasure;
+            fmtMeasure.SetFormatFlags(StringFormatFlagsNoWrap);
+
+            const std::vector<std::wstring> parts = SplitKeycastCombo(g_keycastTextValue);
+
+            std::vector<float> capWidths(parts.size(), 0.0f);
+            float capHeight = 0.0f;
+            for (size_t i = 0; i < parts.size(); ++i) {
+                RectF bounds;
+                g.MeasureString(parts[i].c_str(), -1, &fontKey, PointF(0.0f, 0.0f), &fmtMeasure, &bounds);
+                capWidths[i] = bounds.Width + capPadX * 2.0f;
+                capHeight = std::max(capHeight, bounds.Height + capPadY * 2.0f);
+            }
+
+            float contentWidth = 0.0f;
+            for (size_t i = 0; i < parts.size(); ++i) {
+                contentWidth += capWidths[i];
+                if (i + 1 < parts.size()) contentWidth += plusWidth;
+            }
+
+            const float cardW = contentWidth + cardPadX * 2.0f;
+            const float cardH = capHeight + cardPadY * 2.0f;
+            const float fade = s_keycastAlpha;
+            const float slide = (1.0f - fade) * 12.0f;
+
+            const POINT toastAnchor = ToastAnchor();
+            const float slotRight = static_cast<float>(toastAnchor.x + TOAST_W - GetSystemMetrics(SM_XVIRTUALSCREEN));
+            const float slotBottom = static_cast<float>(toastAnchor.y - GetSystemMetrics(SM_YVIRTUALSCREEN) - KEYCAST_TOAST_GAP);
+            const float cardX = std::max(8.0f, slotRight - cardW);
+            const float cardY = slotBottom - cardH + slide;
+
+            GraphicsPath shadowPath;
+            AddRoundedRectPath(shadowPath, cardX, cardY + 4.0f, cardW, cardH, cardRadius);
+            SolidBrush shadowBrush(WithFade(Color(85, 0, 0, 0), fade));
+            g.FillPath(&shadowBrush, &shadowPath);
 
             GraphicsPath cardPath;
-            float radius = 12.0f;
-            float d = radius * 2.0f;
-            cardPath.AddArc((float)kx, (float)ky, d, d, 180.0f, 90.0f);
-            cardPath.AddArc((float)(kx + kw - d), (float)ky, d, d, 270.0f, 90.0f);
-            cardPath.AddArc((float)(kx + kw - d), (float)(ky + kh - d), d, d, 0.0f, 90.0f);
-            cardPath.AddArc((float)kx, (float)(ky + kh - d), d, d, 90.0f, 90.0f);
-            cardPath.CloseFigure();
-            SolidBrush bgCard(Color(215, 18, 18, 24));
-            g.FillPath(&bgCard, &cardPath);
-            Pen borderPen(Color(200, 90, 90, 110), 1.0f);
-            g.DrawPath(&borderPen, &cardPath);
+            AddRoundedRectPath(cardPath, cardX, cardY, cardW, cardH, cardRadius);
+            LinearGradientBrush cardBrush(RectF(cardX, cardY, cardW, cardH), WithFade(Color(240, 34, 36, 47), fade), WithFade(Color(240, 15, 16, 23), fade), LinearGradientModeVertical);
+            g.FillPath(&cardBrush, &cardPath);
+            Pen cardPen(WithFade(Color(210, 120, 122, 148), fade), 1.0f);
+            g.DrawPath(&cardPen, &cardPath);
 
-            StringFormat fmtCenter;
-            fmtCenter.SetAlignment(StringAlignmentCenter);
-            fmtCenter.SetLineAlignment(StringAlignmentCenter);
-            Font fontKey(L"Consolas", 13.0f, FontStyleBold);
-            SolidBrush textWhite(Color(255, 240, 240, 250));
-            g.DrawString(g_keycastTextValue.c_str(), -1, &fontKey, RectF((REAL)kx, (REAL)ky, (REAL)kw, (REAL)kh), &fmtCenter, &textWhite);
+            float cursorX = cardX + cardPadX;
+            const float capY = cardY + cardPadY;
+            for (size_t i = 0; i < parts.size(); ++i) {
+                const RectF capRect(cursorX, capY, capWidths[i], capHeight);
+                const bool isModifier = IsModifierKeyName(parts[i]);
+
+                GraphicsPath capPath;
+                AddRoundedRectPath(capPath, cursorX, capY, capWidths[i], capHeight, capRadius);
+                LinearGradientBrush capBrush(capRect,
+                    WithFade(isModifier ? Color(255, 84, 122, 216) : Color(255, 92, 92, 108), fade),
+                    WithFade(isModifier ? Color(255, 38, 72, 158) : Color(255, 48, 48, 60), fade),
+                    LinearGradientModeVertical);
+                g.FillPath(&capBrush, &capPath);
+                Pen capPen(WithFade(Color(170, 255, 255, 255), fade), 1.0f);
+                g.DrawPath(&capPen, &capPath);
+
+                SolidBrush keyBrush(WithFade(Color(255, 246, 247, 252), fade));
+                g.DrawString(parts[i].c_str(), -1, &fontKey, capRect, &fmtKey, &keyBrush);
+
+                cursorX += capWidths[i];
+                if (i + 1 < parts.size()) {
+                    SolidBrush plusBrush(WithFade(Color(200, 178, 180, 198), fade));
+                    g.DrawString(L"+", -1, &fontPlus, RectF(cursorX, capY, plusWidth, capHeight), &fmtKey, &plusBrush);
+                    cursorX += plusWidth;
+                }
+            }
         }
     }
 
-    HDC screenDC = GetDC(NULL);
+    ScopedScreenDC screenDC;
     if (screenDC) {
         SIZE size = { g_backWidth, g_backHeight };
+        POINT ptDst = { GetSystemMetrics(SM_XVIRTUALSCREEN), GetSystemMetrics(SM_YVIRTUALSCREEN) };
         POINT ptSrc = { 0, 0 };
         BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
-        UpdateLayeredWindow(g_hwndOverlay, screenDC, NULL, &size, g_memDC, &ptSrc, 0, &blend, ULW_ALPHA);
-        ReleaseDC(NULL, screenDC);
+        UpdateLayeredWindow(g_hwndOverlay, screenDC.get(), &ptDst, &size, g_memDC, &ptSrc, 0, &blend, ULW_ALPHA);
     }
 
     SyncOverlayVisibility();
@@ -464,7 +618,7 @@ void PruneVanishingStrokes() {
         --i;
         Stroke& s = g_strokes[i];
         if (s.birthTick == 0) continue;
-        float age = (float)(now - s.birthTick);
+        float age = static_cast<float>(now - s.birthTick);
         if (age >= 1200.0f) {
             g_strokes.erase(g_strokes.begin() + i);
             changed = true;
@@ -489,6 +643,21 @@ void PruneVanishingStrokes() {
 void ProcessOverlayFrame() {
     PruneVanishingStrokes();
 
+    bool bakedBlur = false;
+    for (auto& s : g_strokes) {
+        if (s.type != StrokeType::Blur || s.cachedBitmap) continue;
+        if ((s.cachedRect.right - s.cachedRect.left) < 8 || (s.cachedRect.bottom - s.cachedRect.top) < 8) continue;
+        if (!bakedBlur && g_hwndOverlay) {
+            ShowWindow(g_hwndOverlay, SW_HIDE);
+            bakedBlur = true;
+        }
+        s.cachedBitmap = BakeBlurredBitmap(s.cachedRect);
+        s_framePending = true;
+    }
+    if (bakedBlur) {
+        ShowWindow(g_hwndOverlay, SW_SHOWNOACTIVATE);
+    }
+
     POINT pt = { 0, 0 };
     bool mouseMoved = false;
     if (GetCursorPos(&pt)) {
@@ -498,14 +667,19 @@ void ProcessOverlayFrame() {
         }
     }
 
+    const ULONGLONG nowTick = GetTickCount64();
+
     static bool s_prevSpotlight = false;
     static bool s_prevKeycast = false;
+    static std::wstring s_prevKeycastValue;
     if (g_spotlightMode != s_prevSpotlight) {
         s_prevSpotlight = g_spotlightMode;
         s_framePending = true;
     }
-    if (g_keycastText != s_prevKeycast) {
+    if (g_keycastText != s_prevKeycast || g_keycastTextValue != s_prevKeycastValue) {
+        if (g_keycastText && !s_prevKeycast) s_keycastShownTick = nowTick;
         s_prevKeycast = g_keycastText;
+        s_prevKeycastValue = g_keycastTextValue;
         s_framePending = true;
     }
 
@@ -519,16 +693,34 @@ void ProcessOverlayFrame() {
         s_framePending = true;
     }
 
-    if (g_isTextInputActive) {
+    static bool s_prevTextInputActive = false;
+    if (g_isTextInputActive != s_prevTextInputActive) {
+        s_prevTextInputActive = g_isTextInputActive;
+        if (g_hwndOverlay) {
+            if (g_isTextInputActive) SetTimer(g_hwndOverlay, 4, 500, NULL);
+            else KillTimer(g_hwndOverlay, 4);
+        }
         s_framePending = true;
     }
 
-    if (g_keycastText && GetTickCount64() > g_keycastUntilTick) {
+    if (g_keycastText && nowTick > g_keycastUntilTick) {
         g_keycastText = false;
         s_framePending = true;
     }
 
-    bool animating = g_isTextInputActive || g_keycastText;
+    if (g_keycastText) {
+        const ULONGLONG elapsed = (nowTick > s_keycastShownTick) ? (nowTick - s_keycastShownTick) : 0;
+        const ULONGLONG remaining = (g_keycastUntilTick > nowTick) ? (g_keycastUntilTick - nowTick) : 0;
+        const float ramp = std::min(1.0f, std::min(static_cast<float>(elapsed) / static_cast<float>(KEYCAST_FADE_IN_MS),
+                                              static_cast<float>(remaining) / static_cast<float>(KEYCAST_FADE_OUT_MS)));
+        if (ramp < 1.0f) s_framePending = true;
+        s_keycastAlpha = ramp * ramp * (3.0f - 2.0f * ramp);
+    }
+    else {
+        s_keycastAlpha = 0.0f;
+    }
+
+    bool animating = g_keycastText;
     if (!animating) {
         for (const auto& s : g_strokes) {
             if (s.birthTick != 0) {
@@ -591,18 +783,24 @@ void UpdateCamera() {
     POINT pt;
     GetCursorPos(&pt);
 
-    int vScreenX = GetSystemMetrics(SM_XVIRTUALSCREEN);
-    int vScreenY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    const int primaryW = GetSystemMetrics(SM_CXSCREEN);
+    const int primaryH = GetSystemMetrics(SM_CYSCREEN);
+    const bool onPrimary = (pt.x >= 0 && pt.x < primaryW && pt.y >= 0 && pt.y < primaryH);
 
-    float relX = (float)(pt.x - vScreenX);
-    float relY = (float)(pt.y - vScreenY);
-
-    float targetX = (float)vScreenX + relX - (relX / g_currentZoom);
-    float targetY = (float)vScreenY + relY - (relY / g_currentZoom);
+    float targetX = 0.0f;
+    float targetY = 0.0f;
+    if (onPrimary) {
+        targetX = static_cast<float>(pt.x) - (static_cast<float>(pt.x) / g_currentZoom);
+        targetY = static_cast<float>(pt.y) - (static_cast<float>(pt.y) / g_currentZoom);
+    }
+    else {
+        targetX = static_cast<float>(pt.x) - (primaryW / 2.0f) / g_currentZoom;
+        targetY = static_cast<float>(pt.y) - (primaryH / 2.0f) / g_currentZoom;
+    }
 
     g_camX += (targetX - g_camX) * 0.35f;
     g_camY += (targetY - g_camY) * 0.35f;
-    MagSetFullscreenTransform(g_currentZoom, (int)g_camX, (int)g_camY);
+    MagSetFullscreenTransform(g_currentZoom, static_cast<int>(g_camX), static_cast<int>(g_camY));
 }
 
 void RepositionOverlay() {
@@ -621,10 +819,10 @@ void RepositionOverlay() {
 }
 
 void DrawArrow(Graphics& g, Pen& pen, SolidBrush& brush, POINT p1, POINT p2, int width, int offX, int offY) {
-    float x1 = (float)(p1.x - offX);
-    float y1 = (float)(p1.y - offY);
-    float x2 = (float)(p2.x - offX);
-    float y2 = (float)(p2.y - offY);
+    float x1 = static_cast<float>(p1.x - offX);
+    float y1 = static_cast<float>(p1.y - offY);
+    float x2 = static_cast<float>(p2.x - offX);
+    float y2 = static_cast<float>(p2.y - offY);
 
     float dx = x2 - x1;
     float dy = y2 - y1;
@@ -636,7 +834,7 @@ void DrawArrow(Graphics& g, Pen& pen, SolidBrush& brush, POINT p1, POINT p2, int
     float nx = -uy;
     float ny = ux;
 
-    float arrowLen = (float)width * 3.2f + 10.0f;
+    float arrowLen = static_cast<float>(width) * 3.2f + 10.0f;
     if (arrowLen > dist * 0.85f) arrowLen = dist * 0.85f;
     float arrowHalfWidth = arrowLen * 0.55f;
 
@@ -661,21 +859,22 @@ std::shared_ptr<Bitmap> BakeBlurredBitmap(RECT rc) {
     int h = rc.bottom - rc.top;
     if (w < 8 || h < 8) return nullptr;
 
-    HDC screenDC = GetDC(NULL);
+    ScopedScreenDC screenDC;
     if (!screenDC) return nullptr;
-    HDC capDC = CreateCompatibleDC(screenDC);
-    HBITMAP capBmp = CreateCompatibleBitmap(screenDC, w, h);
-    HBITMAP oldBmp = (HBITMAP)SelectObject(capDC, capBmp);
-    BitBlt(capDC, 0, 0, w, h, screenDC, rc.left, rc.top, SRCCOPY);
-    SelectObject(capDC, oldBmp);
-    DeleteDC(capDC);
-    ReleaseDC(NULL, screenDC);
+
+    ScopedMemoryDC capDC(screenDC.get());
+    UniqueBitmap capBmp(static_cast<HBITMAP>(CreateCompatibleBitmap(screenDC.get(), w, h)));
+    if (!capDC || !capBmp) return nullptr;
+
+    ScopedSelectedObject selected(capDC.get(), capBmp.get());
+    BitBlt(capDC.get(), 0, 0, w, h, screenDC.get(), rc.left, rc.top, SRCCOPY);
+    selected.restore();
 
     auto resultBmp = std::make_shared<Bitmap>(w, h, PixelFormat32bppPARGB);
     {
-        Bitmap src(capBmp, NULL);
-        int sw = max(2, w / 14);
-        int sh = max(2, h / 14);
+        Bitmap src(capBmp.get(), NULL);
+        int sw = std::max(2, w / 14);
+        int sh = std::max(2, h / 14);
 
         Bitmap smallBmp(sw, sh, PixelFormat32bppPARGB);
         {
@@ -694,13 +893,12 @@ std::shared_ptr<Bitmap> BakeBlurredBitmap(RECT rc) {
         Pen framePen(Color(190, 45, 45, 50), 1.0f);
         gDest.DrawRectangle(&framePen, 0, 0, w - 1, h - 1);
     }
-    DeleteObject(capBmp);
     return resultBmp;
 }
 
 static void ApplyStrokeAlpha(const Stroke& stroke, Color& col) {
     if (stroke.opacity >= 0.999f) return;
-    col = Color((BYTE)(col.GetAlpha() * stroke.opacity), col.GetRed(), col.GetGreen(), col.GetBlue());
+    col = Color(static_cast<BYTE>(col.GetAlpha() * stroke.opacity), col.GetRed(), col.GetGreen(), col.GetBlue());
 }
 
 void DrawStroke(Graphics& g, const Stroke& stroke, int offX, int offY) {
@@ -711,7 +909,7 @@ void DrawStroke(Graphics& g, const Stroke& stroke, int offX, int offY) {
         ApplyStrokeAlpha(stroke, col);
         SolidBrush textBrush(col);
         Font font(L"Segoe UI", 18.0f, FontStyleBold);
-        PointF origin((REAL)(stroke.points[0].x - offX), (REAL)(stroke.points[0].y - offY));
+        PointF origin(static_cast<REAL>(stroke.points[0].x - offX), static_cast<REAL>(stroke.points[0].y - offY));
         g.DrawString(stroke.text.c_str(), -1, &font, origin, &textBrush);
         return;
     }
@@ -737,7 +935,7 @@ void DrawStroke(Graphics& g, const Stroke& stroke, int offX, int offY) {
         fmt.SetAlignment(StringAlignmentCenter);
         fmt.SetLineAlignment(StringAlignmentCenter);
 
-        RectF rect((REAL)(x - radius), (REAL)(y - radius + 1), (REAL)(radius * 2), (REAL)(radius * 2));
+        RectF rect(static_cast<REAL>(x - radius), static_cast<REAL>(y - radius + 1), static_cast<REAL>(radius * 2), static_cast<REAL>(radius * 2));
         g.DrawString(numStr.c_str(), -1, &font, rect, &fmt, &textBrush);
         return;
     }
@@ -747,23 +945,23 @@ void DrawStroke(Graphics& g, const Stroke& stroke, int offX, int offY) {
     if (stroke.type == StrokeType::Blur) {
         if (stroke.cachedBitmap) {
             g.DrawImage(stroke.cachedBitmap.get(),
-                (REAL)(stroke.cachedRect.left - offX),
-                (REAL)(stroke.cachedRect.top - offY));
+                static_cast<REAL>(stroke.cachedRect.left - offX),
+                static_cast<REAL>(stroke.cachedRect.top - offY));
         }
         else {
             POINT a = stroke.points.front();
             POINT b = stroke.points.back();
-            int left = min(a.x, b.x) - offX;
-            int right = max(a.x, b.x) - offX;
-            int top = min(a.y, b.y) - offY;
-            int bottom = max(a.y, b.y) - offY;
+            int left = std::min(a.x, b.x) - offX;
+            int right = std::max(a.x, b.x) - offX;
+            int top = std::min(a.y, b.y) - offY;
+            int bottom = std::max(a.y, b.y) - offY;
 
             SolidBrush previewBrush(Color(140, 16, 16, 18));
-            g.FillRectangle(&previewBrush, (REAL)left, (REAL)top, (REAL)(right - left), (REAL)(bottom - top));
+            g.FillRectangle(&previewBrush, static_cast<REAL>(left), static_cast<REAL>(top), static_cast<REAL>(right - left), static_cast<REAL>(bottom - top));
 
             Pen previewPen(Color(200, 200, 200, 200), 1.0f);
             previewPen.SetDashStyle(DashStyleDash);
-            g.DrawRectangle(&previewPen, (REAL)left, (REAL)top, (REAL)(right - left), (REAL)(bottom - top));
+            g.DrawRectangle(&previewPen, static_cast<REAL>(left), static_cast<REAL>(top), static_cast<REAL>(right - left), static_cast<REAL>(bottom - top));
         }
         return;
     }
@@ -772,14 +970,14 @@ void DrawStroke(Graphics& g, const Stroke& stroke, int offX, int offY) {
         COLORREF c = stroke.color ? stroke.color : RGB(250, 205, 40);
         POINT a = stroke.points.front();
         POINT b = stroke.points.back();
-        int left = min(a.x, b.x) - offX;
-        int right = max(a.x, b.x) - offX;
-        int top = min(a.y, b.y) - offY;
-        int bottom = max(a.y, b.y) - offY;
+        int left = std::min(a.x, b.x) - offX;
+        int right = std::max(a.x, b.x) - offX;
+        int top = std::min(a.y, b.y) - offY;
+        int bottom = std::max(a.y, b.y) - offY;
         Color fillCol(110, GetRValue(c), GetGValue(c), GetBValue(c));
         ApplyStrokeAlpha(stroke, fillCol);
         SolidBrush fill(fillCol);
-        g.FillRectangle(&fill, (REAL)left, (REAL)top, (REAL)(right - left), (REAL)(bottom - top));
+        g.FillRectangle(&fill, static_cast<REAL>(left), static_cast<REAL>(top), static_cast<REAL>(right - left), static_cast<REAL>(bottom - top));
         return;
     }
 
@@ -787,7 +985,7 @@ void DrawStroke(Graphics& g, const Stroke& stroke, int offX, int offY) {
         COLORREF c = stroke.color ? stroke.color : g_config.lineColor;
         Color col(255, GetRValue(c), GetGValue(c), GetBValue(c));
         ApplyStrokeAlpha(stroke, col);
-        Pen pen(col, (REAL)g_config.lineWidth);
+        Pen pen(col, static_cast<REAL>(g_config.lineWidth));
         pen.SetStartCap(LineCapRound);
         pen.SetEndCap(LineCapRound);
         pen.SetLineJoin(LineJoinRound);
@@ -803,7 +1001,7 @@ void DrawStroke(Graphics& g, const Stroke& stroke, int offX, int offY) {
         COLORREF c = stroke.color ? stroke.color : g_config.arrowColor;
         Color col(255, GetRValue(c), GetGValue(c), GetBValue(c));
         ApplyStrokeAlpha(stroke, col);
-        Pen pen(col, (REAL)g_config.arrowWidth);
+        Pen pen(col, static_cast<REAL>(g_config.arrowWidth));
         SolidBrush brush(col);
         DrawArrow(g, pen, brush, stroke.points.front(), stroke.points.back(), g_config.arrowWidth, offX, offY);
     }
@@ -811,18 +1009,18 @@ void DrawStroke(Graphics& g, const Stroke& stroke, int offX, int offY) {
         COLORREF c = stroke.color ? stroke.color : g_config.rectColor;
         Color col(255, GetRValue(c), GetGValue(c), GetBValue(c));
         ApplyStrokeAlpha(stroke, col);
-        Pen pen(col, (REAL)g_config.rectWidth);
+        Pen pen(col, static_cast<REAL>(g_config.rectWidth));
         pen.SetStartCap(LineCapRound);
         pen.SetEndCap(LineCapRound);
         pen.SetLineJoin(LineJoinMiter);
 
         POINT a = stroke.points.front();
         POINT b = stroke.points.back();
-        int left = min(a.x, b.x) - offX;
-        int right = max(a.x, b.x) - offX;
-        int top = min(a.y, b.y) - offY;
-        int bottom = max(a.y, b.y) - offY;
-        g.DrawRectangle(&pen, (REAL)left, (REAL)top, (REAL)(right - left), (REAL)(bottom - top));
+        int left = std::min(a.x, b.x) - offX;
+        int right = std::max(a.x, b.x) - offX;
+        int top = std::min(a.y, b.y) - offY;
+        int bottom = std::max(a.y, b.y) - offY;
+        g.DrawRectangle(&pen, static_cast<REAL>(left), static_cast<REAL>(top), static_cast<REAL>(right - left), static_cast<REAL>(bottom - top));
     }
 }
 
@@ -843,99 +1041,71 @@ void CopyScreenshotToClipboard() {
     int scrW = GetSystemMetrics(SM_CXVIRTUALSCREEN);
     int scrH = GetSystemMetrics(SM_CYVIRTUALSCREEN);
 
-    HDC screenDC = GetDC(NULL);
+    ScopedScreenDC screenDC;
     if (!screenDC) return;
-    HDC captureDC = CreateCompatibleDC(screenDC);
-    HBITMAP hBmp = CreateCompatibleBitmap(screenDC, scrW, scrH);
-    HBITMAP hOldBmp = (HBITMAP)SelectObject(captureDC, hBmp);
 
-    BitBlt(captureDC, 0, 0, scrW, scrH, screenDC, vScreenX, vScreenY, SRCCOPY);
+    ScopedMemoryDC captureDC(screenDC.get());
+    UniqueBitmap captureBmp(static_cast<HBITMAP>(CreateCompatibleBitmap(screenDC.get(), scrW, scrH)));
+    if (!captureDC || !captureBmp) return;
+
+    ScopedSelectedObject selected(captureDC.get(), captureBmp.get());
+    BitBlt(captureDC.get(), 0, 0, scrW, scrH, screenDC.get(), vScreenX, vScreenY, SRCCOPY);
 
     {
-        Graphics g(captureDC);
+        Graphics g(captureDC.get());
         g.SetSmoothingMode(SmoothingModeAntiAlias);
         FillBoardBackground(g, 0, 0, scrW, scrH);
         for (const auto& s : g_strokes) DrawStroke(g, s, vScreenX, vScreenY);
         if (!g_currentStroke.points.empty()) DrawStroke(g, g_currentStroke, vScreenX, vScreenY);
     }
 
-    SelectObject(captureDC, hOldBmp);
-    DeleteDC(captureDC);
-    ReleaseDC(NULL, screenDC);
+    selected.restore();
 
-    bool opened = false;
-    for (int i = 0; i < 5; ++i) {
-        if (OpenClipboard(g_hwndOverlay)) {
-            opened = true;
-            break;
-        }
-        Sleep(10);
-    }
+    ScopedClipboard clipboard(g_hwndOverlay);
+    if (!clipboard.ok()) return;
 
-    if (opened) {
-        EmptyClipboard();
-        if (!SetClipboardData(CF_BITMAP, hBmp)) {
-            DeleteObject(hBmp);
-        }
-        CloseClipboard();
-    }
-    else {
-        DeleteObject(hBmp);
-    }
+    EmptyClipboard();
+    if (SetClipboardData(CF_BITMAP, captureBmp.get())) captureBmp.release();
 }
 
 void CopyRegionToClipboard(RECT rcScreen) {
     int vScreenX = GetSystemMetrics(SM_XVIRTUALSCREEN);
     int vScreenY = GetSystemMetrics(SM_YVIRTUALSCREEN);
 
-    int left = max(rcScreen.left, vScreenX);
-    int top = max(rcScreen.top, vScreenY);
-    int right = min(rcScreen.right, vScreenX + GetSystemMetrics(SM_CXVIRTUALSCREEN));
-    int bottom = min(rcScreen.bottom, vScreenY + GetSystemMetrics(SM_CYVIRTUALSCREEN));
+    int left = std::max(static_cast<int>(rcScreen.left), vScreenX);
+    int top = std::max(static_cast<int>(rcScreen.top), vScreenY);
+    int right = std::min(static_cast<int>(rcScreen.right), vScreenX + GetSystemMetrics(SM_CXVIRTUALSCREEN));
+    int bottom = std::min(static_cast<int>(rcScreen.bottom), vScreenY + GetSystemMetrics(SM_CYVIRTUALSCREEN));
 
     int w = right - left;
     int h = bottom - top;
     if (w < 1 || h < 1) return;
 
-    HDC screenDC = GetDC(NULL);
+    ScopedScreenDC screenDC;
     if (!screenDC) return;
-    HDC captureDC = CreateCompatibleDC(screenDC);
-    HBITMAP hBmp = CreateCompatibleBitmap(screenDC, w, h);
-    HBITMAP hOldBmp = (HBITMAP)SelectObject(captureDC, hBmp);
 
-    BitBlt(captureDC, 0, 0, w, h, screenDC, left, top, SRCCOPY);
+    ScopedMemoryDC captureDC(screenDC.get());
+    UniqueBitmap captureBmp(static_cast<HBITMAP>(CreateCompatibleBitmap(screenDC.get(), w, h)));
+    if (!captureDC || !captureBmp) return;
+
+    ScopedSelectedObject selected(captureDC.get(), captureBmp.get());
+    BitBlt(captureDC.get(), 0, 0, w, h, screenDC.get(), left, top, SRCCOPY);
 
     {
-        Graphics g(captureDC);
+        Graphics g(captureDC.get());
         g.SetSmoothingMode(SmoothingModeAntiAlias);
         FillBoardBackground(g, 0, 0, w, h);
         for (const auto& s : g_strokes) DrawStroke(g, s, left, top);
         if (!g_currentStroke.points.empty()) DrawStroke(g, g_currentStroke, left, top);
     }
 
-    SelectObject(captureDC, hOldBmp);
-    DeleteDC(captureDC);
-    ReleaseDC(NULL, screenDC);
+    selected.restore();
 
-    bool opened = false;
-    for (int i = 0; i < 5; ++i) {
-        if (OpenClipboard(g_hwndOverlay)) {
-            opened = true;
-            break;
-        }
-        Sleep(10);
-    }
+    ScopedClipboard clipboard(g_hwndOverlay);
+    if (!clipboard.ok()) return;
 
-    if (opened) {
-        EmptyClipboard();
-        if (!SetClipboardData(CF_BITMAP, hBmp)) {
-            DeleteObject(hBmp);
-        }
-        CloseClipboard();
-    }
-    else {
-        DeleteObject(hBmp);
-    }
+    EmptyClipboard();
+    if (SetClipboardData(CF_BITMAP, captureBmp.get())) captureBmp.release();
 }
 
 void StartCropSelection() {
@@ -968,75 +1138,82 @@ static void RenderToastFrame() {
     bmi.bmiHeader.biCompression = BI_RGB;
 
     void* bits = nullptr;
-    HDC screenDC = GetDC(NULL);
+    ScopedScreenDC screenDC;
     if (!screenDC) return;
 
-    HDC memDC = CreateCompatibleDC(screenDC);
-    HBITMAP hBmp = CreateDIBSection(screenDC, &bmi, DIB_RGB_COLORS, &bits, NULL, 0);
-    HBITMAP hOld = (HBITMAP)SelectObject(memDC, hBmp);
+    ScopedMemoryDC memDC(screenDC.get());
+    UniqueBitmap hBmp(CreateDIBSection(screenDC.get(), &bmi, DIB_RGB_COLORS, &bits, NULL, 0));
+    if (!memDC || !hBmp || !bits) return;
 
-    memset(bits, 0, (size_t)stride * (size_t)h);
+    ScopedSelectedObject selected(memDC.get(), hBmp.get());
+    memset(bits, 0, static_cast<size_t>(stride) * static_cast<size_t>(h));
 
     {
-        Bitmap surface(w, h, stride, PixelFormat32bppPARGB, (BYTE*)bits);
+        Bitmap surface(w, h, stride, PixelFormat32bppPARGB, static_cast<BYTE*>(bits));
         Graphics g(&surface);
         g.SetSmoothingMode(SmoothingModeAntiAlias);
-        g.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
+        g.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
 
         GraphicsPath cardPath;
-        float radius = 10.0f;
-        float d = radius * 2.0f;
-        cardPath.AddArc(0.0f, 0.0f, d, d, 180.0f, 90.0f);
-        cardPath.AddArc((float)w - d - 1.0f, 0.0f, d, d, 270.0f, 90.0f);
-        cardPath.AddArc((float)w - d - 1.0f, (float)h - d - 1.0f, d, d, 0.0f, 90.0f);
-        cardPath.AddArc(0.0f, (float)h - d - 1.0f, d, d, 90.0f, 90.0f);
-        cardPath.CloseFigure();
-
-        SolidBrush bgCard(Color(235, 18, 18, 22));
+        AddRoundedRectPath(cardPath, 0.0f, 0.0f, static_cast<REAL>(w), static_cast<REAL>(h), 12.0f);
+        LinearGradientBrush bgCard(RectF(0.0f, 0.0f, static_cast<REAL>(w), static_cast<REAL>(h)), Color(242, 34, 36, 47), Color(242, 15, 16, 23), LinearGradientModeVertical);
         g.FillPath(&bgCard, &cardPath);
 
-        Pen borderPen(Color(180, 55, 55, 62), 1.0f);
-        g.DrawPath(&borderPen, &cardPath);
+        GraphicsPath borderPath;
+        AddRoundedRectPath(borderPath, 0.5f, 0.5f, static_cast<REAL>(w) - 1.0f, static_cast<REAL>(h) - 1.0f, 12.0f);
+        Pen borderPen(Color(190, 120, 122, 148), 1.0f);
+        g.DrawPath(&borderPen, &borderPath);
+
+        const Color accentCol(255, GetRValue(s_toastAccent), GetGValue(s_toastAccent), GetBValue(s_toastAccent));
+
+        GraphicsPath glowPath;
+        AddRoundedRectPath(glowPath, 6.0f, 6.0f, 16.0f, static_cast<REAL>(h) - 12.0f, 8.0f);
+        SolidBrush glowBrush(Color(45, accentCol.GetR(), accentCol.GetG(), accentCol.GetB()));
+        g.FillPath(&glowBrush, &glowPath);
 
         GraphicsPath barPath;
-        barPath.AddArc(6.0f, 10.0f, 6.0f, 6.0f, 180.0f, 180.0f);
-        barPath.AddArc(6.0f, (float)h - 16.0f, 6.0f, 6.0f, 0.0f, 180.0f);
-        barPath.CloseFigure();
-        Color barCol(255, GetRValue(s_toastAccent), GetGValue(s_toastAccent), GetBValue(s_toastAccent));
-        SolidBrush barBrush(barCol);
+        AddRoundedRectPath(barPath, 11.0f, 11.0f, 4.0f, static_cast<REAL>(h) - 22.0f, 2.0f);
+        SolidBrush barBrush(accentCol);
         g.FillPath(&barBrush, &barPath);
 
-        Font fontTitle(L"Segoe UI", 9.5f, FontStyleBold);
-        Font fontMsg(L"Segoe UI", 8.5f);
-        SolidBrush textWhite(Color(255, 240, 240, 240));
-        SolidBrush textDim(Color(255, 170, 170, 175));
+        Font fontTitle(L"Segoe UI", 10.5f, FontStyleBold);
+        Font fontMsg(L"Segoe UI", 9.0f);
+        SolidBrush textWhite(Color(255, 242, 243, 248));
+        SolidBrush textDim(Color(255, 176, 178, 190));
+        StringFormat fmtText;
+        fmtText.SetFormatFlags(StringFormatFlagsNoWrap);
+        fmtText.SetTrimming(StringTrimmingEllipsisCharacter);
 
-        g.DrawString(s_toastTitle.c_str(), -1, &fontTitle, PointF(22.0f, 12.0f), &textWhite);
-        g.DrawString(s_toastMsg.c_str(), -1, &fontMsg, PointF(22.0f, 34.0f), &textDim);
+        g.DrawString(s_toastTitle.c_str(), -1, &fontTitle, RectF(27.0f, 12.0f, static_cast<REAL>(w) - 39.0f, 20.0f), &fmtText, &textWhite);
+        g.DrawString(s_toastMsg.c_str(), -1, &fontMsg, RectF(27.0f, 34.0f, static_cast<REAL>(w) - 39.0f, 20.0f), &fmtText, &textDim);
     }
 
-    BYTE alphaByte = (BYTE)(s_toastAlpha * 255.0f);
+    BYTE alphaByte = static_cast<BYTE>(s_toastAlpha * 255.0f);
     POINT ptSrc = { 0, 0 };
     SIZE sz = { w, h };
     BLENDFUNCTION blend = { AC_SRC_OVER, 0, alphaByte, AC_SRC_ALPHA };
-    UpdateLayeredWindow(g_hwndToast, screenDC, NULL, &sz, memDC, &ptSrc, 0, &blend, ULW_ALPHA);
+    UpdateLayeredWindow(g_hwndToast, screenDC.get(), NULL, &sz, memDC.get(), &ptSrc, 0, &blend, ULW_ALPHA);
+}
 
-    SelectObject(memDC, hOld);
-    DeleteObject(hBmp);
-    DeleteDC(memDC);
-    ReleaseDC(NULL, screenDC);
+static POINT ToastAnchor() {
+    POINT cursor = { 0, 0 };
+    GetCursorPos(&cursor);
+
+    HMONITOR monitor = MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO info = { sizeof(MONITORINFO) };
+    if (monitor && GetMonitorInfo(monitor, &info)) {
+        return { info.rcWork.right - TOAST_W - 24, info.rcWork.bottom - TOAST_H - 24 };
+    }
+    return { GetSystemMetrics(SM_CXSCREEN) - TOAST_W - 24, GetSystemMetrics(SM_CYSCREEN) - TOAST_H - 48 };
 }
 
 void InitToastWindow(HINSTANCE hInstance) {
-    int sw = GetSystemMetrics(SM_CXSCREEN);
-    int sh = GetSystemMetrics(SM_CYSCREEN);
-    int x = sw - TOAST_W - 24;
-    int y = sh - TOAST_H - 48;
+    const POINT anchor = ToastAnchor();
 
     g_hwndToast = CreateWindowExW(
         WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         L"LensItToast", L"Notification", WS_POPUP,
-        x, y, TOAST_W, TOAST_H, NULL, NULL, hInstance, NULL
+        anchor.x, anchor.y, TOAST_W, TOAST_H, NULL, NULL, hInstance, NULL
     );
 
     ApplyToastCaptureAffinity();
@@ -1058,11 +1235,8 @@ void ShowNotification(const std::wstring& title, const std::wstring& message, CO
 
 void RepositionToast() {
     if (!g_hwndToast) return;
-    int sw = GetSystemMetrics(SM_CXSCREEN);
-    int sh = GetSystemMetrics(SM_CYSCREEN);
-    int x = sw - TOAST_W - 24;
-    int y = sh - TOAST_H - 48;
-    SetWindowPos(g_hwndToast, HWND_TOPMOST, x, y, TOAST_W, TOAST_H, SWP_NOACTIVATE);
+    const POINT anchor = ToastAnchor();
+    SetWindowPos(g_hwndToast, HWND_TOPMOST, anchor.x, anchor.y, TOAST_W, TOAST_H, SWP_NOACTIVATE);
 }
 
 LRESULT CALLBACK ToastWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -1117,10 +1291,11 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         if (lParam == WM_RBUTTONUP || lParam == WM_LBUTTONUP) {
             POINT pt; GetCursorPos(&pt);
             HMENU hMenu = CreatePopupMenu();
-            AppendMenu(hMenu, MF_OWNERDRAW, ID_TRAY_SETTINGS, (LPCTSTR)ID_TRAY_SETTINGS);
-            AppendMenu(hMenu, MF_OWNERDRAW, ID_TRAY_EXIT, (LPCTSTR)ID_TRAY_EXIT);
+            AppendMenu(hMenu, MF_OWNERDRAW, ID_TRAY_SETTINGS, reinterpret_cast<LPCTSTR>(ID_TRAY_SETTINGS));
+            AppendMenu(hMenu, MF_OWNERDRAW, ID_TRAY_EXIT, reinterpret_cast<LPCTSTR>(ID_TRAY_EXIT));
             SetForegroundWindow(hwnd);
             int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hwnd, NULL);
+            PostMessageW(hwnd, WM_NULL, 0, 0);
             DestroyMenu(hMenu);
             if (cmd == ID_TRAY_SETTINGS) ShowSettingsWindow(GetModuleHandle(NULL));
             else if (cmd == ID_TRAY_EXIT) PostQuitMessage(0);
@@ -1131,34 +1306,39 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         ShowSettingsWindow(GetModuleHandle(NULL));
         return 0;
 
+    case WM_APP_TAKE_SCREENSHOT:
+        CopyScreenshotToClipboard();
+        ShowNotification(L"Screenshot", L"Copied to clipboard!", RGB(46, 204, 113));
+        return 0;
+
     case WM_MEASUREITEM: {
-        MEASUREITEMSTRUCT* mis = (MEASUREITEMSTRUCT*)lParam;
+        MEASUREITEMSTRUCT* mis = reinterpret_cast<MEASUREITEMSTRUCT*>(lParam);
         mis->itemWidth = 140; mis->itemHeight = 32;
         return TRUE;
     }
     case WM_DRAWITEM: {
-        DRAWITEMSTRUCT* dis = (DRAWITEMSTRUCT*)lParam;
+        DRAWITEMSTRUCT* dis = reinterpret_cast<DRAWITEMSTRUCT*>(lParam);
         Graphics g(dis->hDC);
         g.SetSmoothingMode(SmoothingModeAntiAlias);
         bool isHover = (dis->itemState & ODS_SELECTED);
         SolidBrush bgBrush(isHover ? Color(255, 60, 60, 60) : Color(255, 30, 30, 30));
-        g.FillRectangle(&bgBrush, (int)dis->rcItem.left, (int)dis->rcItem.top, 160, 32);
+        g.FillRectangle(&bgBrush, static_cast<int>(dis->rcItem.left), static_cast<int>(dis->rcItem.top), 160, 32);
 
         SolidBrush textBrush(Color(255, 220, 220, 220));
         Font font(L"Segoe UI", 11);
         StringFormat format; format.SetAlignment(StringAlignmentNear); format.SetLineAlignment(StringAlignmentCenter);
-        RectF textRect((REAL)dis->rcItem.left + 36, (REAL)dis->rcItem.top, 120.0f, 32.0f);
+        RectF textRect(static_cast<REAL>(dis->rcItem.left) + 36, static_cast<REAL>(dis->rcItem.top), 120.0f, 32.0f);
 
         Pen iconPen(Color(220, 220, 220), 2.0f);
         if (dis->itemID == ID_TRAY_SETTINGS) {
             g.DrawString(L"Settings", -1, &font, textRect, &format, &textBrush);
-            g.DrawEllipse(&iconPen, (int)dis->rcItem.left + 12, (int)dis->rcItem.top + 8, 14, 14);
-            g.DrawEllipse(&iconPen, (int)dis->rcItem.left + 15, (int)dis->rcItem.top + 11, 8, 8);
+            g.DrawEllipse(&iconPen, static_cast<int>(dis->rcItem.left) + 12, static_cast<int>(dis->rcItem.top) + 8, 14, 14);
+            g.DrawEllipse(&iconPen, static_cast<int>(dis->rcItem.left) + 15, static_cast<int>(dis->rcItem.top) + 11, 8, 8);
         }
         else if (dis->itemID == ID_TRAY_EXIT) {
             g.DrawString(L"Exit", -1, &font, textRect, &format, &textBrush);
-            g.DrawLine(&iconPen, (int)dis->rcItem.left + 13, (int)dis->rcItem.top + 10, (int)dis->rcItem.left + 25, (int)dis->rcItem.top + 22);
-            g.DrawLine(&iconPen, (int)dis->rcItem.left + 25, (int)dis->rcItem.top + 10, (int)dis->rcItem.left + 13, (int)dis->rcItem.top + 22);
+            g.DrawLine(&iconPen, static_cast<int>(dis->rcItem.left) + 13, static_cast<int>(dis->rcItem.top) + 10, static_cast<int>(dis->rcItem.left) + 25, static_cast<int>(dis->rcItem.top) + 22);
+            g.DrawLine(&iconPen, static_cast<int>(dis->rcItem.left) + 25, static_cast<int>(dis->rcItem.top) + 10, static_cast<int>(dis->rcItem.left) + 13, static_cast<int>(dis->rcItem.top) + 22);
         }
         return TRUE;
     }
@@ -1169,6 +1349,10 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
     case WM_TIMER:
         if (wParam == 3) {
             ProcessOverlayFrame();
+            return 0;
+        }
+        else if (wParam == 4) {
+            RedrawOverlay();
             return 0;
         }
         else if (wParam == 1) {

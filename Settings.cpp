@@ -1,10 +1,20 @@
 #include "LensIt.h"
+#include "WinHandles.h"
+#include <windowsx.h>
+
+namespace {
+
+constexpr int kWindowWidth = 340;
+constexpr float kWindowHeightCollapsed = 555.0f;
+constexpr float kWindowHeightExpanded = 785.0f;
+
+}
 
 static float g_uiScale = 1.0f;
 static bool g_shortcutsExpanded = false;
 
-static float s_animHeight = 555.0f;
-static float s_targetHeight = 555.0f;
+static float s_animHeight = kWindowHeightCollapsed;
+static float s_targetHeight = kWindowHeightCollapsed;
 
 RECT btnBind = { 20, 32, 320, 66 };
 RECT chkResetZoomRow = { 20, 74, 320, 98 };
@@ -81,8 +91,8 @@ static void AddRoundedRect(GraphicsPath& path, float x, float y, float w, float 
 }
 
 static void DrawModernToggle(Graphics& g, int x, int y, bool isChecked) {
-    float fx = (float)x;
-    float fy = (float)y;
+    float fx = static_cast<float>(x);
+    float fy = static_cast<float>(y);
     float fw = 34.0f;
     float fh = 18.0f;
 
@@ -102,13 +112,13 @@ static void DrawModernToggle(Graphics& g, int x, int y, bool isChecked) {
 }
 
 static void DrawModernSlider(Graphics& g, RECT trackRect, int val, int minVal, int maxVal, COLORREF accentColor) {
-    float percent = (float)(val - minVal) / (float)(maxVal - minVal);
+    float percent = static_cast<float>(val - minVal) / static_cast<float>(maxVal - minVal);
     if (percent < 0.0f) percent = 0.0f;
     if (percent > 1.0f) percent = 1.0f;
 
-    float totalW = (float)(trackRect.right - trackRect.left);
-    float centerY = (float)(trackRect.top + (trackRect.bottom - trackRect.top) / 2);
-    float startX = (float)trackRect.left;
+    float totalW = static_cast<float>(trackRect.right - trackRect.left);
+    float centerY = static_cast<float>(trackRect.top + (trackRect.bottom - trackRect.top) / 2);
+    float startX = static_cast<float>(trackRect.left);
 
     GraphicsPath bgPath;
     AddRoundedRect(bgPath, startX, centerY - 2.5f, totalW, 5.0f, 2.5f);
@@ -133,8 +143,8 @@ static void DrawModernSlider(Graphics& g, RECT trackRect, int val, int minVal, i
 static void UpdateSettingsWindowSize() {
     if (!g_hwndSettings) return;
 
-    RECT wr = { 0, 0, (int)(340 * g_uiScale), (int)(s_animHeight * g_uiScale) };
-    AdjustWindowRectEx(&wr, WS_POPUP | WS_CAPTION | WS_SYSMENU, FALSE, WS_EX_TOPMOST);
+    RECT wr = { 0, 0, static_cast<int>(kWindowWidth * g_uiScale), static_cast<int>(s_animHeight * g_uiScale) };
+    AdjustWindowRectExForDpi(&wr, WS_POPUP | WS_CAPTION | WS_SYSMENU, FALSE, WS_EX_TOPMOST, GetDpiForWindow(g_hwndSettings));
     int w = wr.right - wr.left;
     int h = wr.bottom - wr.top;
 
@@ -147,19 +157,19 @@ void ShowSettingsWindow(HINSTANCE hInstance) {
         return;
     }
 
-    s_animHeight = s_targetHeight = g_shortcutsExpanded ? 785.0f : 555.0f;
+    s_animHeight = s_targetHeight = g_shortcutsExpanded ? kWindowHeightExpanded : kWindowHeightCollapsed;
 
     g_hwndSettings = CreateWindowEx(
         WS_EX_TOPMOST, L"LensItSettings", L"LensIt Settings",
         WS_POPUP | WS_CAPTION | WS_SYSMENU,
-        0, 0, 340, (int)s_animHeight, NULL, NULL, hInstance, NULL
+        0, 0, kWindowWidth, static_cast<int>(s_animHeight), NULL, NULL, hInstance, NULL
     );
 
     UINT dpi = GetDpiForWindow(g_hwndSettings);
-    g_uiScale = (dpi > 0) ? ((float)dpi / 96.0f) : 1.0f;
+    g_uiScale = (dpi > 0) ? (static_cast<float>(dpi) / 96.0f) : 1.0f;
 
-    RECT wr = { 0, 0, (int)(340 * g_uiScale), (int)(s_animHeight * g_uiScale) };
-    AdjustWindowRectEx(&wr, WS_POPUP | WS_CAPTION | WS_SYSMENU, FALSE, WS_EX_TOPMOST);
+    RECT wr = { 0, 0, static_cast<int>(kWindowWidth * g_uiScale), static_cast<int>(s_animHeight * g_uiScale) };
+    AdjustWindowRectExForDpi(&wr, WS_POPUP | WS_CAPTION | WS_SYSMENU, FALSE, WS_EX_TOPMOST, dpi);
     int w = wr.right - wr.left;
     int h = wr.bottom - wr.top;
     int cx = (GetSystemMetrics(SM_CXSCREEN) - w) / 2;
@@ -230,12 +240,12 @@ static void DrawColorPickerModal(Graphics& g) {
 
     // 1. Semi-transparent backdrop overlay
     SolidBrush dimBrush(Color(180, 8, 8, 12));
-    g.FillRectangle(&dimBrush, 0, 0, 340, (int)s_animHeight + 40);
+    g.FillRectangle(&dimBrush, 0, 0, kWindowWidth, static_cast<int>(s_animHeight) + 40);
 
     // 2. Card Background & Outer Glow
     GraphicsPath cardPath;
-    AddRoundedRect(cardPath, (float)pickerCard.left, (float)pickerCard.top,
-        (float)(pickerCard.right - pickerCard.left), (float)(pickerCard.bottom - pickerCard.top), 8.0f);
+    AddRoundedRect(cardPath, static_cast<float>(pickerCard.left), static_cast<float>(pickerCard.top),
+        static_cast<float>(pickerCard.right - pickerCard.left), static_cast<float>(pickerCard.bottom - pickerCard.top), 8.0f);
 
     SolidBrush cardBg(Color(255, 26, 26, 30));
     g.FillPath(&cardBg, &cardPath);
@@ -305,7 +315,7 @@ static void DrawColorPickerModal(Graphics& g) {
     for (int i = 0; i < 16; ++i) {
         RECT r = GetPaletteSwatchRect(i);
         GraphicsPath swatchPath;
-        AddRoundedRect(swatchPath, (float)r.left, (float)r.top, (float)(r.right - r.left), (float)(r.bottom - r.top), 4.0f);
+        AddRoundedRect(swatchPath, static_cast<float>(r.left), static_cast<float>(r.top), static_cast<float>(r.right - r.left), static_cast<float>(r.bottom - r.top), 4.0f);
 
         COLORREF c = s_paletteColors[i];
         SolidBrush swatchBrush(Color(255, GetRValue(c), GetGValue(c), GetBValue(c)));
@@ -343,27 +353,27 @@ static void DrawColorPickerModal(Graphics& g) {
     // 7. Action Buttons (Cancel / Apply)
     // Cancel
     GraphicsPath btnCancelPath;
-    AddRoundedRect(btnCancelPath, (float)btnPickerCancel.left, (float)btnPickerCancel.top,
-        (float)(btnPickerCancel.right - btnPickerCancel.left), (float)(btnPickerCancel.bottom - btnPickerCancel.top), 5.0f);
+    AddRoundedRect(btnCancelPath, static_cast<float>(btnPickerCancel.left), static_cast<float>(btnPickerCancel.top),
+        static_cast<float>(btnPickerCancel.right - btnPickerCancel.left), static_cast<float>(btnPickerCancel.bottom - btnPickerCancel.top), 5.0f);
     SolidBrush cancelBg(Color(255, 34, 34, 40));
     g.FillPath(&cancelBg, &btnCancelPath);
     Pen cancelBorder(Color(255, 60, 60, 68), 1.0f);
     g.DrawPath(&cancelBorder, &btnCancelPath);
     g.DrawString(L"Cancel", -1, &fontReg,
-        RectF((REAL)btnPickerCancel.left, (REAL)btnPickerCancel.top, (REAL)(btnPickerCancel.right - btnPickerCancel.left), (REAL)(btnPickerCancel.bottom - btnPickerCancel.top)),
+        RectF(static_cast<REAL>(btnPickerCancel.left), static_cast<REAL>(btnPickerCancel.top), static_cast<REAL>(btnPickerCancel.right - btnPickerCancel.left), static_cast<REAL>(btnPickerCancel.bottom - btnPickerCancel.top)),
         &fmtCenter, &textWhite);
 
     // Apply
     GraphicsPath btnApplyPath;
-    AddRoundedRect(btnApplyPath, (float)btnPickerApply.left, (float)btnPickerApply.top,
-        (float)(btnPickerApply.right - btnPickerApply.left), (float)(btnPickerApply.bottom - btnPickerApply.top), 5.0f);
+    AddRoundedRect(btnApplyPath, static_cast<float>(btnPickerApply.left), static_cast<float>(btnPickerApply.top),
+        static_cast<float>(btnPickerApply.right - btnPickerApply.left), static_cast<float>(btnPickerApply.bottom - btnPickerApply.top), 5.0f);
     SolidBrush applyBg(Color(255, 0, 120, 215));
     g.FillPath(&applyBg, &btnApplyPath);
     Pen applyBorder(Color(255, 0, 150, 255), 1.0f);
     g.DrawPath(&applyBorder, &btnApplyPath);
     Font fontBold(L"Segoe UI", 9.0f, FontStyleBold);
     g.DrawString(L"Apply", -1, &fontBold,
-        RectF((REAL)btnPickerApply.left, (REAL)btnPickerApply.top, (REAL)(btnPickerApply.right - btnPickerApply.left), (REAL)(btnPickerApply.bottom - btnPickerApply.top)),
+        RectF(static_cast<REAL>(btnPickerApply.left), static_cast<REAL>(btnPickerApply.top), static_cast<REAL>(btnPickerApply.right - btnPickerApply.left), static_cast<REAL>(btnPickerApply.bottom - btnPickerApply.top)),
         &fmtCenter, &textWhite);
 }
 
@@ -391,7 +401,7 @@ void DrawCustomUI(Graphics& g) {
     bool isTrigBinding = (g_bindingMode == BindingMode::TriggerKey);
 
     GraphicsPath btnPath;
-    AddRoundedRect(btnPath, (float)btnBind.left, (float)btnBind.top, (float)(btnBind.right - btnBind.left), (float)(btnBind.bottom - btnBind.top), 5.0f);
+    AddRoundedRect(btnPath, static_cast<float>(btnBind.left), static_cast<float>(btnBind.top), static_cast<float>(btnBind.right - btnBind.left), static_cast<float>(btnBind.bottom - btnBind.top), 5.0f);
     SolidBrush trigBrush(isTrigBinding ? Color(255, 0, 120, 215) : Color(255, 32, 32, 36));
     g.FillPath(&trigBrush, &btnPath);
     Pen trigBorder(isTrigBinding ? Color(255, 0, 160, 255) : Color(255, 60, 60, 65), 1.0f);
@@ -399,20 +409,20 @@ void DrawCustomUI(Graphics& g) {
 
     std::wstring bindTxt = isTrigBinding ? L"Press any key or mouse button..." : (L"[  " + GetKeyNameStr(g_config.triggerKey) + L"  ]");
     g.DrawString(bindTxt.c_str(), -1, &fontTitle,
-        RectF((REAL)btnBind.left, (REAL)btnBind.top, (REAL)(btnBind.right - btnBind.left), (REAL)(btnBind.bottom - btnBind.top)),
+        RectF(static_cast<REAL>(btnBind.left), static_cast<REAL>(btnBind.top), static_cast<REAL>(btnBind.right - btnBind.left), static_cast<REAL>(btnBind.bottom - btnBind.top)),
         &fmtCenter, &textBrush);
 
     // 2. Toggle: Reset zoom on release
     DrawModernToggle(g, btnBind.left, chkResetZoomRow.top + 3, g_config.resetZoomOnRelease);
-    g.DrawString(L"Reset zoom on trigger release", -1, &fontReg, PointF(62, (REAL)chkResetZoomRow.top + 2), &textBrush);
+    g.DrawString(L"Reset zoom on trigger release", -1, &fontReg, PointF(62, static_cast<REAL>(chkResetZoomRow.top) + 2), &textBrush);
 
     // 3. Toggle: Keep drawings on screen
     DrawModernToggle(g, btnBind.left, chkKeepDrawingsRow.top + 3, g_config.keepDrawingsOnRelease);
-    g.DrawString(L"Keep drawings on screen (Click-through)", -1, &fontReg, PointF(62, (REAL)chkKeepDrawingsRow.top + 2), &textBrush);
+    g.DrawString(L"Keep drawings on screen (Click-through)", -1, &fontReg, PointF(62, static_cast<REAL>(chkKeepDrawingsRow.top) + 2), &textBrush);
 
     // 4. Toggle: Hide toasts from screen capture
     DrawModernToggle(g, btnBind.left, chkHideToastsRow.top + 3, g_config.hideToastsFromCapture);
-    g.DrawString(L"Hide notifications from screen capture", -1, &fontReg, PointF(62, (REAL)chkHideToastsRow.top + 2), &textBrush);
+    g.DrawString(L"Hide notifications from screen capture", -1, &fontReg, PointF(62, static_cast<REAL>(chkHideToastsRow.top) + 2), &textBrush);
 
     g.DrawLine(&sepPen, 20, 162, 320, 162);
 
@@ -421,7 +431,7 @@ void DrawCustomUI(Graphics& g) {
     g.DrawString(lineTitle.c_str(), -1, &fontReg, PointF(20, 165), &textBrush);
 
     GraphicsPath cLinePath;
-    AddRoundedRect(cLinePath, (float)colorLine.left, (float)colorLine.top, 30.0f, 30.0f, 5.0f);
+    AddRoundedRect(cLinePath, static_cast<float>(colorLine.left), static_cast<float>(colorLine.top), 30.0f, 30.0f, 5.0f);
     SolidBrush brushLine(Color(255, GetRValue(g_config.lineColor), GetGValue(g_config.lineColor), GetBValue(g_config.lineColor)));
     g.FillPath(&brushLine, &cLinePath);
     g.DrawPath(&borderPen, &cLinePath);
@@ -433,7 +443,7 @@ void DrawCustomUI(Graphics& g) {
     g.DrawString(arrowTitle.c_str(), -1, &fontReg, PointF(20, 225), &textBrush);
 
     GraphicsPath cArrowPath;
-    AddRoundedRect(cArrowPath, (float)colorArrow.left, (float)colorArrow.top, 30.0f, 30.0f, 5.0f);
+    AddRoundedRect(cArrowPath, static_cast<float>(colorArrow.left), static_cast<float>(colorArrow.top), 30.0f, 30.0f, 5.0f);
     SolidBrush brushArrow(Color(255, GetRValue(g_config.arrowColor), GetGValue(g_config.arrowColor), GetBValue(g_config.arrowColor)));
     g.FillPath(&brushArrow, &cArrowPath);
     g.DrawPath(&borderPen, &cArrowPath);
@@ -445,7 +455,7 @@ void DrawCustomUI(Graphics& g) {
     bool isRectBinding = (g_bindingMode == BindingMode::RectKey);
 
     GraphicsPath btnRectPath;
-    AddRoundedRect(btnRectPath, (float)btnBindRect.left, (float)btnBindRect.top, (float)(btnBindRect.right - btnBindRect.left), (float)(btnBindRect.bottom - btnBindRect.top), 5.0f);
+    AddRoundedRect(btnRectPath, static_cast<float>(btnBindRect.left), static_cast<float>(btnBindRect.top), static_cast<float>(btnBindRect.right - btnBindRect.left), static_cast<float>(btnBindRect.bottom - btnBindRect.top), 5.0f);
     SolidBrush rectBindBrush(isRectBinding ? Color(255, 0, 120, 215) : Color(255, 32, 32, 36));
     g.FillPath(&rectBindBrush, &btnRectPath);
     Pen rectBorder(isRectBinding ? Color(255, 0, 160, 255) : Color(255, 60, 60, 65), 1.0f);
@@ -453,14 +463,14 @@ void DrawCustomUI(Graphics& g) {
 
     std::wstring bindRectTxt = isRectBinding ? L"Press any key or mouse button..." : (L"[  " + GetKeyNameStr(g_config.rectKey) + L"  ]");
     g.DrawString(bindRectTxt.c_str(), -1, &fontTitle,
-        RectF((REAL)btnBindRect.left, (REAL)btnBindRect.top, (REAL)(btnBindRect.right - btnBindRect.left), (REAL)(btnBindRect.bottom - btnBindRect.top)),
+        RectF(static_cast<REAL>(btnBindRect.left), static_cast<REAL>(btnBindRect.top), static_cast<REAL>(btnBindRect.right - btnBindRect.left), static_cast<REAL>(btnBindRect.bottom - btnBindRect.top)),
         &fmtCenter, &textBrush);
 
     std::wstring rectTitle = L"Rectangle  *  " + std::to_wstring(g_config.rectWidth) + L" px";
     g.DrawString(rectTitle.c_str(), -1, &fontReg, PointF(20, 348), &textBrush);
 
     GraphicsPath cRectPath;
-    AddRoundedRect(cRectPath, (float)colorRect.left, (float)colorRect.top, 30.0f, 30.0f, 5.0f);
+    AddRoundedRect(cRectPath, static_cast<float>(colorRect.left), static_cast<float>(colorRect.top), 30.0f, 30.0f, 5.0f);
     SolidBrush brushRect(Color(255, GetRValue(g_config.rectColor), GetGValue(g_config.rectColor), GetBValue(g_config.rectColor)));
     g.FillPath(&brushRect, &cRectPath);
     g.DrawPath(&borderPen, &cRectPath);
@@ -470,7 +480,7 @@ void DrawCustomUI(Graphics& g) {
     // 8. Badge
     g.DrawString(L"Step Badge (Middle Mouse Click):", -1, &fontReg, PointF(20, 408), &textBrush);
     GraphicsPath cBadgePath;
-    AddRoundedRect(cBadgePath, (float)colorBadge.left, (float)colorBadge.top, 30.0f, 30.0f, 5.0f);
+    AddRoundedRect(cBadgePath, static_cast<float>(colorBadge.left), static_cast<float>(colorBadge.top), 30.0f, 30.0f, 5.0f);
     SolidBrush brushBadge(Color(255, GetRValue(g_config.badgeColor), GetGValue(g_config.badgeColor), GetBValue(g_config.badgeColor)));
     g.FillPath(&brushBadge, &cBadgePath);
     g.DrawPath(&borderPen, &cBadgePath);
@@ -480,7 +490,7 @@ void DrawCustomUI(Graphics& g) {
 
     // 9. Shortcuts Header
     GraphicsPath hdrPath;
-    AddRoundedRect(hdrPath, (float)btnShortcutsHeader.left, (float)btnShortcutsHeader.top, (float)(btnShortcutsHeader.right - btnShortcutsHeader.left), (float)(btnShortcutsHeader.bottom - btnShortcutsHeader.top), 5.0f);
+    AddRoundedRect(hdrPath, static_cast<float>(btnShortcutsHeader.left), static_cast<float>(btnShortcutsHeader.top), static_cast<float>(btnShortcutsHeader.right - btnShortcutsHeader.left), static_cast<float>(btnShortcutsHeader.bottom - btnShortcutsHeader.top), 5.0f);
     SolidBrush hdrBg(Color(255, 28, 28, 32));
     g.FillPath(&hdrBg, &hdrPath);
     Pen hdrBorder(Color(255, 50, 50, 56), 1.0f);
@@ -507,7 +517,7 @@ void DrawCustomUI(Graphics& g) {
     fmtNear.SetAlignment(StringAlignmentNear);
     fmtNear.SetLineAlignment(StringAlignmentCenter);
     g.DrawString(toggleTxt.c_str(), -1, &fontReg,
-        RectF((REAL)btnShortcutsHeader.left + 28, (REAL)btnShortcutsHeader.top, (REAL)(btnShortcutsHeader.right - btnShortcutsHeader.left - 30), (REAL)(btnShortcutsHeader.bottom - btnShortcutsHeader.top)),
+        RectF(static_cast<REAL>(btnShortcutsHeader.left) + 28, static_cast<REAL>(btnShortcutsHeader.top), static_cast<REAL>(btnShortcutsHeader.right - btnShortcutsHeader.left - 30), static_cast<REAL>(btnShortcutsHeader.bottom - btnShortcutsHeader.top)),
         &fmtNear, &textBrush);
 
     float startY = 520.0f;
@@ -603,8 +613,8 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
     }
 
     case WM_DPICHANGED: {
-        g_uiScale = (float)LOWORD(wParam) / 96.0f;
-        RECT* const prcNewWindow = (RECT*)lParam;
+        g_uiScale = static_cast<float>(LOWORD(wParam)) / 96.0f;
+        RECT* const prcNewWindow = reinterpret_cast<RECT*>(lParam);
         SetWindowPos(hwnd, NULL,
             prcNewWindow->left, prcNewWindow->top,
             prcNewWindow->right - prcNewWindow->left,
@@ -624,28 +634,26 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         int h = rcClient.bottom - rcClient.top;
 
         if (w > 0 && h > 0) {
-            HDC memDC = CreateCompatibleDC(hdc);
-            HBITMAP memBmp = CreateCompatibleBitmap(hdc, w, h);
-            HBITMAP oldBmp = (HBITMAP)SelectObject(memDC, memBmp);
+            ScopedMemoryDC memDC(hdc);
+            UniqueBitmap memBmp(static_cast<HBITMAP>(CreateCompatibleBitmap(hdc, w, h)));
 
-            {
-                Graphics g(memDC);
-                g.SetSmoothingMode(SmoothingModeAntiAlias);
-                DrawCustomUI(g);
+            if (memDC && memBmp) {
+                ScopedSelectedObject selected(memDC.get(), memBmp.get());
+                {
+                    Graphics g(memDC.get());
+                    g.SetSmoothingMode(SmoothingModeAntiAlias);
+                    DrawCustomUI(g);
+                }
+
+                BitBlt(hdc, 0, 0, w, h, memDC.get(), 0, 0, SRCCOPY);
             }
-
-            BitBlt(hdc, 0, 0, w, h, memDC, 0, 0, SRCCOPY);
-
-            SelectObject(memDC, oldBmp);
-            DeleteObject(memBmp);
-            DeleteDC(memDC);
         }
 
         EndPaint(hwnd, &ps);
         return 0;
     }
     case WM_LBUTTONDOWN: {
-        int x = (int)(LOWORD(lParam) / g_uiScale), y = (int)(HIWORD(lParam) / g_uiScale);
+        int x = static_cast<int>(GET_X_LPARAM(lParam) / g_uiScale), y = static_cast<int>(GET_Y_LPARAM(lParam) / g_uiScale);
 
         // Intercept inputs when Modern Color Picker is open
         if (s_pickerOpen) {
@@ -745,14 +753,14 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         return 0;
     }
     case WM_MOUSEMOVE: {
-        int x = (int)(LOWORD(lParam) / g_uiScale);
+        int x = static_cast<int>(GET_X_LPARAM(lParam) / g_uiScale);
 
         if (s_pickerOpen) {
             if (s_pickerDraggingSlider != 0 && (wParam & MK_LBUTTON)) {
-                float percent = (float)(x - rectTrackR.left) / (float)(rectTrackR.right - rectTrackR.left);
+                float percent = static_cast<float>(x - rectTrackR.left) / static_cast<float>(rectTrackR.right - rectTrackR.left);
                 if (percent < 0.0f) percent = 0.0f;
                 if (percent > 1.0f) percent = 1.0f;
-                int val = (int)(percent * 255.0f + 0.5f);
+                int val = static_cast<int>(percent * 255.0f + 0.5f);
 
                 int r = GetRValue(s_pickerColor);
                 int g = GetGValue(s_pickerColor);
@@ -772,10 +780,10 @@ LRESULT CALLBACK SettingsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         }
 
         if (draggingSlider != 0 && (wParam & MK_LBUTTON)) {
-            float percent = (float)(x - (int)rectSliderLine.left) / (float)(rectSliderLine.right - rectSliderLine.left);
+            float percent = static_cast<float>(x - rectSliderLine.left) / static_cast<float>(rectSliderLine.right - rectSliderLine.left);
             if (percent < 0.0f) percent = 0.0f;
             if (percent > 1.0f) percent = 1.0f;
-            int val = 1 + (int)(percent * 19.0f);
+            int val = 1 + static_cast<int>(percent * 19.0f);
 
             if (draggingSlider == 1) g_config.lineWidth = val;
             else if (draggingSlider == 2) g_config.arrowWidth = val;

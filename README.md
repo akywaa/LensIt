@@ -43,14 +43,21 @@ Hold a key and scroll to zoom in on anything, draw lines, arrows and rectangles,
 | Zoom in / out | Hold **Trigger Key** (default `Alt`) + Mouse Wheel |
 | Draw a line | Hold **Trigger Key** + Left Mouse Button |
 | Draw an arrow | Hold **Trigger Key** + Right Mouse Button |
+| Snap line/arrow (0°/45°/90°) | Hold **Trigger Key** + `Shift` + drag |
 | Draw a rectangle | Hold **Trigger Key** + **Rectangle Key** (default `Shift`) + Left Mouse Button |
 | Place a step badge (1, 2, 3...) | Hold **Trigger Key** + Middle Mouse Button |
+| Text on screen | Hold **Trigger Key** + `X` (Type text, `Enter` to commit, `Esc` to cancel) |
 | Toggle Highlighter | Hold **Trigger Key** + `H` |
 | Toggle Blackout Blur | Hold **Trigger Key** + `O` |
+| Laser Ink (vanishing strokes) | Hold **Trigger Key** + `V` |
+| Spotlight focus | Hold **Trigger Key** + `S` |
+| Whiteboard / Blackboard | Hold **Trigger Key** + `W` (cycles White / Dark / Off) |
+| Keystroke HUD | Hold **Trigger Key** + `K` |
 | **Toggle Break Timer** | Hold **Trigger Key** + `T` |
 | Quick Color switch | Hold **Trigger Key** + `R` (Red) / `G` (Green) / `B` (Blue) / `Y` (Yellow) |
 | Undo last stroke | Hold **Trigger Key** + `Z` |
-| Copy screenshot to clipboard | Hold **Trigger Key** + `C` |
+| Fullscreen Screenshot | Hold **Trigger Key** + `C` |
+| Crop area Screenshot | Hold **Trigger Key** + `Shift` + `C` |
 | Pin drawings (keep on screen) | Hold **Trigger Key** + `P` |
 | Reset zoom & clear drawings | `Esc` |
 | Open settings / Exit | Right-click the tray icon |
@@ -165,14 +172,21 @@ The compiled binary will be located in the `x64/Release/` directory. All require
 | Приблизить / отдалить | Зажать **клавишу-триггер** (по умолчанию `Alt`) + колесо мыши |
 | Нарисовать линию | Зажать **клавишу-триггер** + ЛКМ |
 | Нарисовать стрелку | Зажать **клавишу-триггер** + ПКМ |
-| Нарисовать прямоугольник | Зажать **клавишу-триггер** + **клавишу для прямоугольника** (по умолчанию `Shift`) + ЛКМ |
+| Выравнивание линий (0°/45°/90°) | Зажать **клавишу-триггер** + `Shift` + тянуть линию/стрелку |
+| Нарисовать прямоугольник | Зажать **клавишу-триггер** + **клавишу для прямоуг.** (`Shift`) + ЛКМ |
 | Поставить бейдж шага (1, 2, 3...) | Зажать **клавишу-триггер** + СКМ |
+| Текст на экране | Зажать **клавишу-триггер** + `X` (ввод текста, `Enter` — применить, `Esc` — отмена) |
 | Включить/выключить маркер | Зажать **клавишу-триггер** + `H` |
 | Включить/выключить размытие | Зажать **клавишу-триггер** + `O` |
-| **Включить/выключить таймер перерыва** | Зажать **клавишу-триггер** + `T` |
-| Быстрая смена цвета | Зажать **клавишу-триггер** + `R` (красный) / `G` (зелёный) / `B` (синий) / `Y` (жёлтый) |
+| Лазерные чернила (исчезающие) | Зажать **клавишу-триггер** + `V` |
+| Режим прожектора (Spotlight) | Зажать **клавишу-триггер** + `S` |
+| Доска для рисования | Зажать **клавишу-триггер** + `W` (Белая / Тёмная / Выкл) |
+| Отображение нажатых клавиш (HUD) | Зажать **клавишу-триггер** + `K` |
+| **Включить/выключить таймер** | Зажать **клавишу-триггер** + `T` |
+| Быстрая смена цвета | Зажать **клавишу-триггер** + `R`/`G`/`B`/`Y` |
 | Отменить последнее действие | Зажать **клавишу-триггер** + `Z` |
-| Скопировать скриншот с рисунками | Зажать **клавишу-триггер** + `C` |
+| Скриншот всего экрана | Зажать **клавишу-триггер** + `C` |
+| Скриншот области (Crop) | Зажать **клавишу-триггер** + `Shift` + `C` |
 | Закрепить рисунки на экране | Зажать **клавишу-триггер** + `P` |
 | Сбросить приближение и рисунки | `Esc` |
 | Открыть настройки / выйти | ПКМ по иконке в трее |

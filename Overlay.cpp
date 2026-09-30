@@ -66,6 +66,7 @@ void LoadConfig() {
 
     g_config.triggerKey = GetPrivateProfileIntW(L"Settings", L"TriggerKey", g_config.triggerKey, path.c_str());
     g_config.rectKey = GetPrivateProfileIntW(L"Settings", L"RectKey", g_config.rectKey, path.c_str());
+    g_config.freezeKey = GetPrivateProfileIntW(L"Settings", L"FreezeKey", g_config.freezeKey, path.c_str());
     g_config.lineColor = static_cast<COLORREF>(GetPrivateProfileIntW(L"Settings", L"LineColor", g_config.lineColor, path.c_str()));
     g_config.lineWidth = static_cast<int>(GetPrivateProfileIntW(L"Settings", L"LineWidth", g_config.lineWidth, path.c_str()));
     g_config.arrowColor = static_cast<COLORREF>(GetPrivateProfileIntW(L"Settings", L"ArrowColor", g_config.arrowColor, path.c_str()));
@@ -74,6 +75,7 @@ void LoadConfig() {
     g_config.rectWidth = static_cast<int>(GetPrivateProfileIntW(L"Settings", L"RectWidth", g_config.rectWidth, path.c_str()));
     g_config.badgeColor = static_cast<COLORREF>(GetPrivateProfileIntW(L"Settings", L"BadgeColor", g_config.badgeColor, path.c_str()));
     g_config.resetZoomOnRelease = GetPrivateProfileIntW(L"Settings", L"ResetZoomOnRelease", g_config.resetZoomOnRelease ? 1 : 0, path.c_str()) != 0;
+    g_config.holdUsesLaser = GetPrivateProfileIntW(L"Settings", L"HoldUsesLaser", g_config.holdUsesLaser ? 1 : 0, path.c_str()) != 0;
     g_config.keepDrawingsOnRelease = GetPrivateProfileIntW(L"Settings", L"KeepDrawingsOnRelease", g_config.keepDrawingsOnRelease ? 1 : 0, path.c_str()) != 0;
     g_config.hideToastsFromCapture = GetPrivateProfileIntW(L"Settings", L"HideToastsFromCapture", g_config.hideToastsFromCapture ? 1 : 0, path.c_str()) != 0;
     g_config.isFirstRun = GetPrivateProfileIntW(L"Settings", L"FirstRun", 1, path.c_str()) != 0;
@@ -91,6 +93,7 @@ void SaveConfig() {
 
     writeInt(L"TriggerKey", g_config.triggerKey);
     writeInt(L"RectKey", g_config.rectKey);
+    writeInt(L"FreezeKey", g_config.freezeKey);
     writeInt(L"LineColor", g_config.lineColor);
     writeInt(L"LineWidth", g_config.lineWidth);
     writeInt(L"ArrowColor", g_config.arrowColor);
@@ -99,6 +102,7 @@ void SaveConfig() {
     writeInt(L"RectWidth", g_config.rectWidth);
     writeInt(L"BadgeColor", g_config.badgeColor);
     writeBool(L"ResetZoomOnRelease", g_config.resetZoomOnRelease);
+    writeBool(L"HoldUsesLaser", g_config.holdUsesLaser);
     writeBool(L"KeepDrawingsOnRelease", g_config.keepDrawingsOnRelease);
     writeBool(L"HideToastsFromCapture", g_config.hideToastsFromCapture);
     writeBool(L"FirstRun", g_config.isFirstRun);
@@ -200,6 +204,9 @@ void PresentOverlayFrame() {
                 SolidBrush boardBrush(Color(255, 24, 24, 27));
                 g.FillRectangle(&boardBrush, 0, 0, g_backWidth, g_backHeight);
             }
+            else if (g_app.freezeMode && g_app.freezeBitmap) {
+                g.DrawImage(g_app.freezeBitmap.get(), 0, 0, g_backWidth, g_backHeight);
+            }
 
             for (const auto& s : g_app.strokes) DrawStroke(g, s, vScreenX, vScreenY);
             if (!g_app.currentStroke.points.empty()) DrawStroke(g, g_app.currentStroke, vScreenX, vScreenY);
@@ -285,7 +292,7 @@ void ProcessOverlayFrame() {
     UpdateKeycastState(s_framePending);
 
     bool isDrawingStroke = g_app.isDrawingLine || g_app.isDrawingArrow || g_app.isDrawRectangle ||
-                           g_app.isDrawingHighlight || g_app.isDrawingBlur || !g_app.currentStroke.points.empty();
+        g_app.isDrawingHighlight || g_app.isDrawingBlur || !g_app.currentStroke.points.empty();
     if (isDrawingStroke) {
         s_framePending = true;
     }
@@ -322,18 +329,19 @@ void ProcessOverlayFrame() {
 void SyncOverlayVisibility() {
     if (!g_hwndOverlay) return;
 
-    bool shouldBeVisible = g_app.breakTimer.active ||
-                           g_app.isTriggerHeld ||
-                           g_app.spotlightMode ||
-                           g_app.textInputActive ||
-                           g_app.keycastText ||
-                           g_app.cropMode ||
-                           (g_app.boardMode != BoardMode::None) ||
-                           g_app.persistentDrawingsActive ||
-                           !g_app.strokes.empty() ||
-                           !g_app.currentStroke.points.empty() ||
-                           (fabsf(g_currentZoom - 1.0f) > 0.002f) ||
-                           (fabsf(g_targetZoom - 1.0f) > 0.002f);
+    bool shouldBeVisible = g_app.freezeMode ||
+        g_app.breakTimer.active ||
+        g_app.isTriggerHeld ||
+        g_app.spotlightMode ||
+        g_app.textInputActive ||
+        g_app.keycastText ||
+        g_app.cropMode ||
+        (g_app.boardMode != BoardMode::None) ||
+        g_app.persistentDrawingsActive ||
+        !g_app.strokes.empty() ||
+        !g_app.currentStroke.points.empty() ||
+        (fabsf(g_currentZoom - 1.0f) > 0.002f) ||
+        (fabsf(g_targetZoom - 1.0f) > 0.002f);
 
     bool isVisible = (IsWindowVisible(g_hwndOverlay) != FALSE);
 
@@ -565,13 +573,16 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         if (lParam == WM_RBUTTONUP || lParam == WM_LBUTTONUP) {
             POINT pt; GetCursorPos(&pt);
             HMENU hMenu = CreatePopupMenu();
-            AppendMenu(hMenu, MF_OWNERDRAW, ID_TRAY_SETTINGS, reinterpret_cast<LPCTSTR>(ID_TRAY_SETTINGS));
-            AppendMenu(hMenu, MF_OWNERDRAW, ID_TRAY_EXIT, reinterpret_cast<LPCTSTR>(ID_TRAY_EXIT));
+            AppendMenuW(hMenu, MF_STRING, ID_TRAY_FREEZE, L"Draw Mode (Ctrl + 2)");
+            AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
+            AppendMenuW(hMenu, MF_STRING, ID_TRAY_SETTINGS, L"Settings...");
+            AppendMenuW(hMenu, MF_STRING, ID_TRAY_EXIT, L"Exit");
             SetForegroundWindow(hwnd);
             int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hwnd, NULL);
             PostMessageW(hwnd, WM_NULL, 0, 0);
             DestroyMenu(hMenu);
-            if (cmd == ID_TRAY_SETTINGS) ShowSettingsWindow(GetModuleHandle(NULL));
+            if (cmd == ID_TRAY_FREEZE) ToggleFreezeMode();
+            else if (cmd == ID_TRAY_SETTINGS) ShowSettingsWindow(GetModuleHandle(NULL));
             else if (cmd == ID_TRAY_EXIT) PostQuitMessage(0);
         }
         return 0;
@@ -584,41 +595,6 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         CopyScreenshotToClipboard();
         ShowNotification(L"Screenshot", L"Copied to clipboard!", RGB(46, 204, 113));
         return 0;
-
-    case WM_MEASUREITEM: {
-        MEASUREITEMSTRUCT* mis = reinterpret_cast<MEASUREITEMSTRUCT*>(lParam);
-        mis->itemWidth = 140;
-        mis->itemHeight = 32;
-        return TRUE;
-    }
-    case WM_DRAWITEM: {
-        DRAWITEMSTRUCT* dis = reinterpret_cast<DRAWITEMSTRUCT*>(lParam);
-        Graphics g(dis->hDC);
-        g.SetSmoothingMode(SmoothingModeAntiAlias);
-        bool isHover = (dis->itemState & ODS_SELECTED);
-        SolidBrush bgBrush(isHover ? Color(255, 60, 60, 60) : Color(255, 30, 30, 30));
-        g.FillRectangle(&bgBrush, static_cast<int>(dis->rcItem.left), static_cast<int>(dis->rcItem.top), 160, 32);
-
-        SolidBrush textBrush(Color(255, 220, 220, 220));
-        Font font(L"Segoe UI", 11);
-        StringFormat format;
-        format.SetAlignment(StringAlignmentNear);
-        format.SetLineAlignment(StringAlignmentCenter);
-        RectF textRect(static_cast<REAL>(dis->rcItem.left) + 36, static_cast<REAL>(dis->rcItem.top), 120.0f, 32.0f);
-
-        Pen iconPen(Color(220, 220, 220), 2.0f);
-        if (dis->itemID == ID_TRAY_SETTINGS) {
-            g.DrawString(L"Settings", -1, &font, textRect, &format, &textBrush);
-            g.DrawEllipse(&iconPen, static_cast<int>(dis->rcItem.left) + 12, static_cast<int>(dis->rcItem.top) + 8, 14, 14);
-            g.DrawEllipse(&iconPen, static_cast<int>(dis->rcItem.left) + 15, static_cast<int>(dis->rcItem.top) + 11, 8, 8);
-        }
-        else if (dis->itemID == ID_TRAY_EXIT) {
-            g.DrawString(L"Exit", -1, &font, textRect, &format, &textBrush);
-            g.DrawLine(&iconPen, static_cast<int>(dis->rcItem.left) + 13, static_cast<int>(dis->rcItem.top) + 10, static_cast<int>(dis->rcItem.left) + 25, static_cast<int>(dis->rcItem.top) + 22);
-            g.DrawLine(&iconPen, static_cast<int>(dis->rcItem.left) + 25, static_cast<int>(dis->rcItem.top) + 10, static_cast<int>(dis->rcItem.left) + 13, static_cast<int>(dis->rcItem.top) + 22);
-        }
-        return TRUE;
-    }
 
     case WM_ERASEBKGND:
         return 1;

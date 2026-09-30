@@ -46,6 +46,32 @@ void DrawArrow(Graphics& g, Pen& pen, SolidBrush& brush, POINT p1, POINT p2, int
     g.FillPolygon(&brush, pts, 3);
 }
 
+std::shared_ptr<Gdiplus::Bitmap> CaptureScreenBitmap() {
+    int vScreenX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    int vScreenY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    int scrW = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    int scrH = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+
+    ScopedScreenDC screenDC;
+    if (!screenDC) return nullptr;
+
+    ScopedMemoryDC captureDC(screenDC.get());
+    UniqueBitmap captureBmp(static_cast<HBITMAP>(CreateCompatibleBitmap(screenDC.get(), scrW, scrH)));
+    if (!captureDC || !captureBmp) return nullptr;
+
+    ScopedSelectedObject selected(captureDC.get(), captureBmp.get());
+    BitBlt(captureDC.get(), 0, 0, scrW, scrH, screenDC.get(), vScreenX, vScreenY, SRCCOPY);
+    selected.restore();
+
+    auto result = std::make_shared<Gdiplus::Bitmap>(scrW, scrH, PixelFormat32bppPARGB);
+    {
+        Gdiplus::Bitmap src(captureBmp.get(), NULL);
+        Graphics g(result.get());
+        g.DrawImage(&src, 0, 0, scrW, scrH);
+    }
+    return result;
+}
+
 std::shared_ptr<Gdiplus::Bitmap> BakeBlurredBitmap(RECT rc) {
     int w = rc.right - rc.left;
     int h = rc.bottom - rc.top;
@@ -241,7 +267,13 @@ void CopyScreenshotToClipboard() {
     if (!captureDC || !captureBmp) return;
 
     ScopedSelectedObject selected(captureDC.get(), captureBmp.get());
-    BitBlt(captureDC.get(), 0, 0, scrW, scrH, screenDC.get(), vScreenX, vScreenY, SRCCOPY);
+    if (g_app.freezeMode && g_app.freezeBitmap) {
+        Graphics g(captureDC.get());
+        g.DrawImage(g_app.freezeBitmap.get(), 0, 0, scrW, scrH);
+    }
+    else {
+        BitBlt(captureDC.get(), 0, 0, scrW, scrH, screenDC.get(), vScreenX, vScreenY, SRCCOPY);
+    }
 
     {
         Graphics g(captureDC.get());
@@ -281,7 +313,13 @@ void CopyRegionToClipboard(RECT rcScreen) {
     if (!captureDC || !captureBmp) return;
 
     ScopedSelectedObject selected(captureDC.get(), captureBmp.get());
-    BitBlt(captureDC.get(), 0, 0, w, h, screenDC.get(), left, top, SRCCOPY);
+    if (g_app.freezeMode && g_app.freezeBitmap) {
+        Graphics g(captureDC.get());
+        g.DrawImage(g_app.freezeBitmap.get(), 0, 0, left - vScreenX, top - vScreenY, w, h, UnitPixel);
+    }
+    else {
+        BitBlt(captureDC.get(), 0, 0, w, h, screenDC.get(), left, top, SRCCOPY);
+    }
 
     {
         Graphics g(captureDC.get());
@@ -314,7 +352,7 @@ bool UndoLastStroke() {
             g_app.stepCounter--;
         }
         g_app.strokes.pop_back();
-        if (g_app.strokes.empty()) {
+        if (g_app.strokes.empty() && !g_app.freezeMode) {
             g_app.persistentDrawingsActive = false;
         }
         RedrawOverlay();
@@ -345,7 +383,7 @@ void PruneVanishingStrokes() {
         }
     }
     if (changed) {
-        if (g_app.strokes.empty()) {
+        if (g_app.strokes.empty() && !g_app.freezeMode) {
             g_app.persistentDrawingsActive = false;
         }
         RedrawOverlay();

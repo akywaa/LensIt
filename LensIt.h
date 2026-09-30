@@ -18,6 +18,7 @@
 #include <gdipluseffects.h>
 #include <shellapi.h>
 #include <commdlg.h>
+#include <commctrl.h>
 #include <dwmapi.h>
 #include <vector>
 #include <string>
@@ -31,6 +32,7 @@
 #pragma comment(lib, "gdi32.lib")
 #pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "comdlg32.lib")
+#pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "dwmapi.lib")
 
 using namespace Gdiplus;
@@ -40,9 +42,10 @@ using namespace Gdiplus;
 #define WM_APP_TAKE_SCREENSHOT (WM_APP + 3)
 #define ID_TRAY_SETTINGS      2001
 #define ID_TRAY_EXIT          2002
+#define ID_TRAY_FREEZE        2003
 
 enum class StrokeType { Line, Arrow, Rectangle, Badge, Highlight, Blur, Text };
-enum class BindingMode { None, TriggerKey, RectKey };
+enum class BindingMode { None, TriggerKey, RectKey, FreezeKey };
 
 struct Stroke {
     StrokeType type = StrokeType::Line;
@@ -60,6 +63,7 @@ struct Stroke {
 struct AppConfig {
     DWORD triggerKey = VK_LMENU;
     DWORD rectKey = VK_SHIFT;
+    DWORD freezeKey = '2'; // Ctrl + 2 default
     COLORREF lineColor = RGB(255, 45, 45);
     int lineWidth = 4;
     COLORREF arrowColor = RGB(45, 200, 255);
@@ -67,7 +71,8 @@ struct AppConfig {
     COLORREF rectColor = RGB(46, 204, 113);
     int rectWidth = 4;
     COLORREF badgeColor = RGB(241, 196, 15);
-    bool resetZoomOnRelease = false;
+    bool resetZoomOnRelease = true;
+    bool holdUsesLaser = true;
     bool keepDrawingsOnRelease = false;
     bool hideToastsFromCapture = true;
     bool isFirstRun = true;
@@ -78,6 +83,9 @@ enum class BoardMode { None, White, Dark };
 
 struct AppState {
     bool isTriggerHeld = false;
+    bool freezeMode = false;
+    std::shared_ptr<Gdiplus::Bitmap> freezeBitmap = nullptr;
+
     bool isDrawingLine = false;
     bool isDrawingArrow = false;
     bool isDrawRectangle = false;
@@ -150,11 +158,16 @@ void SyncOverlayVisibility();
 void ProcessOverlayFrame();
 void RepositionToast();
 
+void EnterFreezeMode();
+void ExitFreezeMode();
+void ToggleFreezeMode();
+
 void ShowNotification(const std::wstring& title, const std::wstring& message, COLORREF accentColor = RGB(0, 150, 255));
 void InitToastWindow(HINSTANCE hInstance);
 void ApplyToastCaptureAffinity();
 
 void ShowSettingsWindow(HINSTANCE);
+void UpdateSettingsUI();
 void ShowWelcomeWindow(HINSTANCE);
 void InitTray(HWND, HINSTANCE);
 std::wstring GetKeyNameStr(DWORD vkCode);

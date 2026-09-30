@@ -119,6 +119,7 @@ void ResetDrawingState() {
     g_app.isDrawRectangle = false;
     g_app.isDrawingHighlight = false;
     g_app.isDrawingBlur = false;
+    g_app.laserMode = false;
     g_app.persistentDrawingsActive = false;
     g_app.strokes.clear();
     g_app.currentStroke.points.clear();
@@ -131,6 +132,52 @@ static COLORREF InkColorForNewStroke() {
     return g_app.inkOverrideSet ? g_app.inkOverride : 0;
 }
 
+void EnterFreezeMode() {
+    if (g_app.freezeMode) return;
+    if (g_hwndOverlay) {
+        ShowWindow(g_hwndOverlay, SW_HIDE);
+    }
+    g_app.freezeBitmap = CaptureScreenBitmap();
+    g_app.freezeMode = true;
+    g_app.laserMode = false;
+    if (!g_app.persistentDrawingsActive) {
+        g_app.strokes.clear();
+        g_app.stepCounter = 1;
+    }
+    g_app.currentStroke.points.clear();
+
+    if (g_hwndOverlay) {
+        ShowWindow(g_hwndOverlay, SW_SHOWNOACTIVATE);
+        RedrawOverlay();
+    }
+    SetCursor(LoadCursor(NULL, IDC_CROSS));
+    ShowNotification(L"Draw Mode", L"Screen frozen. Draw freely. Press Esc to exit.", RGB(46, 204, 113));
+}
+
+void ExitFreezeMode() {
+    if (!g_app.freezeMode) return;
+    g_app.freezeMode = false;
+    g_app.freezeBitmap = nullptr;
+    g_app.boardMode = BoardMode::None;
+    g_app.cropMode = false;
+    g_app.cropDragging = false;
+    g_app.laserMode = false;
+    if (!g_app.persistentDrawingsActive) {
+        ResetDrawingState();
+    }
+    g_targetZoom = 1.0f;
+    g_currentZoom = 1.0f;
+    UpdateCamera();
+    SetCursor(LoadCursor(NULL, IDC_ARROW));
+    RedrawOverlay();
+    ShowNotification(L"Draw Mode", L"Screen unfrozen", RGB(220, 70, 70));
+}
+
+void ToggleFreezeMode() {
+    if (g_app.freezeMode) ExitFreezeMode();
+    else EnterFreezeMode();
+}
+
 static void HandleTriggerRelease() {
     g_app.isTriggerHeld = false;
     g_app.isDrawingLine = false;
@@ -139,7 +186,7 @@ static void HandleTriggerRelease() {
     g_app.isDrawingHighlight = false;
     g_app.isDrawingBlur = false;
 
-    if (g_app.textInputActive) {
+    if (g_app.freezeMode || g_app.textInputActive) {
         return;
     }
 
@@ -153,45 +200,12 @@ static void HandleTriggerRelease() {
         RedrawOverlay();
     }
     else {
-        bool hasVanishing = false;
-        bool hasPinnedText = false;
-        for (const auto& s : g_app.strokes) {
-            if (s.birthTick != 0) hasVanishing = true;
-            if (s.pinned) hasPinnedText = true;
+        if (g_config.resetZoomOnRelease) {
+            g_targetZoom = 1.0f;
+            g_currentZoom = 1.0f;
+            UpdateCamera();
         }
-
-        if (g_app.boardMode != BoardMode::None) {
-            g_app.currentStroke.points.clear();
-            g_app.currentStroke.cachedBitmap = nullptr;
-            if (g_config.resetZoomOnRelease) {
-                g_targetZoom = 1.0f;
-                g_currentZoom = 1.0f;
-                UpdateCamera();
-            }
-            RedrawOverlay();
-        }
-        else if (hasVanishing || hasPinnedText) {
-            g_app.strokes.erase(
-                std::remove_if(g_app.strokes.begin(), g_app.strokes.end(),
-                    [](const Stroke& s) { return !s.pinned && s.birthTick == 0; }),
-                g_app.strokes.end());
-            g_app.currentStroke.points.clear();
-            g_app.currentStroke.cachedBitmap = nullptr;
-            if (g_config.resetZoomOnRelease) {
-                g_targetZoom = 1.0f;
-                g_currentZoom = 1.0f;
-                UpdateCamera();
-            }
-            RedrawOverlay();
-        }
-        else {
-            ResetDrawingState();
-            if (g_config.resetZoomOnRelease) {
-                g_targetZoom = 1.0f;
-                g_currentZoom = 1.0f;
-                UpdateCamera();
-            }
-        }
+        ResetDrawingState();
     }
 }
 
@@ -200,29 +214,122 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
         KBDLLHOOKSTRUCT* p = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
         bool isDown = (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN);
 
-        if (p->vkCode == VK_TAB) {
-            if (g_app.isTriggerHeld) {
-                HandleTriggerRelease();
+        if (g_bindingMode != BindingMode::None) {
+            if (!isDown) return 1;
+            if (p->vkCode != VK_ESCAPE) {
+                if (g_bindingMode == BindingMode::TriggerKey) g_config.triggerKey = p->vkCode;
+                else if (g_bindingMode == BindingMode::RectKey) g_config.rectKey = p->vkCode;
+                else if (g_bindingMode == BindingMode::FreezeKey) g_config.freezeKey = p->vkCode;
+            }
+            g_bindingMode = BindingMode::None;
+            SaveConfig();
+            UpdateSettingsUI();
+            return 1;
+        }
+
+        if (isDown && !g_app.textInputActive) {
+            bool ctrlPressed = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+            bool altPressed = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+            if (ctrlPressed && !altPressed && p->vkCode == g_config.freezeKey) {
+                ToggleFreezeMode();
+                return 1;
             }
         }
-        else if (p->vkCode == VK_LWIN || p->vkCode == VK_RWIN) {
-            if (g_app.isTriggerHeld && !IsTriggerPhysicallyPressed()) {
-                HandleTriggerRelease();
+
+        if (g_app.freezeMode && isDown && !g_app.textInputActive) {
+            bool ctrlPressed = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+
+            if (p->vkCode == VK_ESCAPE) {
+                ExitFreezeMode();
+                return 1;
             }
+            if ((ctrlPressed && p->vkCode == 'Z') || p->vkCode == 'Z') {
+                if (UndoLastStroke()) {
+                    ShowNotification(L"Undo", L"Last stroke removed", RGB(120, 160, 255));
+                }
+                return 1;
+            }
+            if ((ctrlPressed && p->vkCode == 'C') || p->vkCode == 'C') {
+                if (IsRectKeyPressed()) {
+                    StartCropSelection();
+                }
+                else {
+                    CopyScreenshotToClipboard();
+                    ShowNotification(L"Screenshot", L"Copied to clipboard!", RGB(46, 204, 113));
+                }
+                return 1;
+            }
+            if (p->vkCode == 'W') {
+                if (g_app.boardMode == BoardMode::None) g_app.boardMode = BoardMode::White;
+                else if (g_app.boardMode == BoardMode::White) g_app.boardMode = BoardMode::Dark;
+                else g_app.boardMode = BoardMode::None;
+                RedrawOverlay();
+                return 1;
+            }
+            if (p->vkCode == 'H') {
+                g_app.activeToolMode = (g_app.activeToolMode == ActiveToolMode::Highlight) ? ActiveToolMode::None : ActiveToolMode::Highlight;
+                ShowNotification(L"Highlighter", g_app.activeToolMode == ActiveToolMode::Highlight ? L"Enabled" : L"Disabled", RGB(250, 205, 40));
+                return 1;
+            }
+            if (p->vkCode == 'O') {
+                g_app.activeToolMode = (g_app.activeToolMode == ActiveToolMode::Blur) ? ActiveToolMode::None : ActiveToolMode::Blur;
+                ShowNotification(L"Blur Redaction", g_app.activeToolMode == ActiveToolMode::Blur ? L"Enabled" : L"Disabled", RGB(140, 140, 255));
+                return 1;
+            }
+            if (p->vkCode == 'V') {
+                g_app.laserMode = !g_app.laserMode;
+                ShowNotification(L"Laser Ink", g_app.laserMode ? L"Enabled (Draw Mode)" : L"Disabled (Draw Mode)", RGB(255, 90, 90));
+                return 1;
+            }
+            if (p->vkCode == 'X') {
+                g_app.textInputActive = true;
+                g_app.textDraft = Stroke();
+                g_app.textDraft.type = StrokeType::Text;
+                g_app.textDraft.color = InkColorForNewStroke();
+                g_app.textDraft.points.emplace_back();
+                GetCursorPos(&g_app.textDraft.points[0]);
+                StartZoomTimer();
+                return 1;
+            }
+            if (p->vkCode == 'P') {
+                g_app.persistentDrawingsActive = !g_app.persistentDrawingsActive;
+                ShowNotification(L"Pin Mode", g_app.persistentDrawingsActive ? L"Drawings pinned to screen" : L"Strokes will clear on exit", RGB(46, 204, 113));
+                return 1;
+            }
+            if (p->vkCode == 'T') {
+                ToggleBreakTimer(5);
+                return 1;
+            }
+
+            COLORREF ink = 0;
+            std::wstring colorName;
+            if (p->vkCode == 'R') { ink = RGB(235, 60, 60); colorName = L"Red"; }
+            else if (p->vkCode == 'G') { ink = RGB(60, 190, 90); colorName = L"Green"; }
+            else if (p->vkCode == 'B') { ink = RGB(70, 130, 250); colorName = L"Blue"; }
+            else if (p->vkCode == 'Y') { ink = RGB(250, 205, 40); colorName = L"Yellow"; }
+
+            if (ink) {
+                g_app.inkOverride = ink;
+                g_app.inkOverrideSet = true;
+                RedrawOverlay();
+                ShowNotification(L"Pen Color", colorName, ink);
+                return 1;
+            }
+        }
+
+        if (p->vkCode == VK_TAB && g_app.isTriggerHeld) {
+            HandleTriggerRelease();
+        }
+        else if ((p->vkCode == VK_LWIN || p->vkCode == VK_RWIN) && g_app.isTriggerHeld && !IsTriggerPhysicallyPressed()) {
+            HandleTriggerRelease();
         }
 
         if (!isDown && !IsKeyMatching(p->vkCode, g_config.triggerKey)) {
             if (IsModifierKey(p->vkCode)) {
                 return CallNextHookEx(nullptr, nCode, wParam, lParam);
             }
-            bool blockAllKeyups = g_app.textInputActive || g_bindingMode != BindingMode::None || g_app.breakTimer.editing;
-            bool consumedByTimer = g_app.breakTimer.active && !g_app.breakTimer.editing &&
-                (p->vkCode == VK_ESCAPE || p->vkCode == VK_SPACE ||
-                    p->vkCode == VK_UP || p->vkCode == VK_DOWN ||
-                    p->vkCode == VK_LEFT || p->vkCode == VK_RIGHT);
-            if (blockAllKeyups || consumedByTimer) {
-                return 1;
-            }
+            bool blockAllKeyups = g_app.textInputActive || g_bindingMode != BindingMode::None || g_app.breakTimer.editing || g_app.freezeMode;
+            if (blockAllKeyups) return 1;
             return CallNextHookEx(nullptr, nCode, wParam, lParam);
         }
 
@@ -313,9 +420,7 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
                 return 1;
             }
 
-            if (!isDown) {
-                return CallNextHookEx(nullptr, nCode, wParam, lParam);
-            }
+            if (!isDown) return CallNextHookEx(nullptr, nCode, wParam, lParam);
 
             if (p->vkCode == VK_ESCAPE) {
                 StopBreakTimer();
@@ -346,13 +451,8 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
         }
 
         if (g_app.textInputActive && isDown && !IsKeyMatching(p->vkCode, g_config.triggerKey)) {
-            if (IsModifierKey(p->vkCode)) {
-                return CallNextHookEx(nullptr, nCode, wParam, lParam);
-            }
-            if (p->vkCode == VK_RETURN) {
-                CommitTextInput();
-                return 1;
-            }
+            if (IsModifierKey(p->vkCode)) return CallNextHookEx(nullptr, nCode, wParam, lParam);
+            if (p->vkCode == VK_RETURN) { CommitTextInput(); return 1; }
             if (p->vkCode == VK_ESCAPE) {
                 g_app.textInputActive = false;
                 g_app.textDraft.text.clear();
@@ -367,9 +467,7 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
                 }
                 return 1;
             }
-            if (IsTextInputBlocker(p->vkCode)) {
-                return 1;
-            }
+            if (IsTextInputBlocker(p->vkCode)) return 1;
 
             wchar_t c = TranslateVkToChar(p->vkCode);
             if (c >= 0x20 && g_app.textDraft.text.length() < 256) {
@@ -379,46 +477,23 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
             return 1;
         }
 
-        if (g_bindingMode != BindingMode::None) {
-            if (!isDown) return 1;
-            if (p->vkCode != VK_ESCAPE) {
-                if (g_bindingMode == BindingMode::TriggerKey) {
-                    g_config.triggerKey = p->vkCode;
-                }
-                else if (g_bindingMode == BindingMode::RectKey) {
-                    g_config.rectKey = p->vkCode;
-                }
-            }
-            g_bindingMode = BindingMode::None;
-            SaveConfig();
-            if (g_hwndSettings) InvalidateRect(g_hwndSettings, NULL, FALSE);
-            return 1;
-        }
-
         if (IsKeyMatching(p->vkCode, g_config.triggerKey)) {
             if (isDown) {
                 g_app.isTriggerHeld = true;
-                if (g_app.textInputActive) {
-                    CommitTextInput();
-                }
+                if (g_app.textInputActive) CommitTextInput();
             }
             else if (wParam == WM_KEYUP || wParam == WM_SYSKEYUP) {
                 HandleTriggerRelease();
             }
         }
         else if (g_app.isTriggerHeld && isDown) {
-            if (p->vkCode == 'T') {
-                ToggleBreakTimer(5);
-                return 1;
-            }
-            if (p->vkCode == 'S') {
-                g_app.spotlightMode = !g_app.spotlightMode;
-                StartZoomTimer();
-                return 1;
-            }
+            if (p->vkCode == 'T') { ToggleBreakTimer(5); return 1; }
+            if (p->vkCode == 'S') { g_app.spotlightMode = !g_app.spotlightMode; StartZoomTimer(); return 1; }
             if (p->vkCode == 'V') {
-                g_app.laserMode = !g_app.laserMode;
-                ShowNotification(L"Laser Ink", g_app.laserMode ? L"Mode enabled" : L"Mode disabled", RGB(255, 90, 90));
+                g_config.holdUsesLaser = !g_config.holdUsesLaser;
+                SaveConfig();
+                UpdateSettingsUI();
+                ShowNotification(L"Laser Ink", g_config.holdUsesLaser ? L"Enabled (Hold)" : L"Disabled (Hold)", RGB(255, 90, 90));
                 return 1;
             }
             if (p->vkCode == 'X') {
@@ -450,46 +525,34 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
                     RedrawOverlay();
                     return 1;
                 }
-                if (g_app.persistentDrawingsActive) {
-                    ShowNotification(L"Pin Mode", L"Drawings are pinned. Unpin with P.", RGB(250, 205, 40));
-                    return 1;
-                }
                 g_targetZoom = 1.0f;
                 g_currentZoom = 1.0f;
                 g_app.inkOverrideSet = false;
                 ResetDrawingState();
                 UpdateCamera();
-                ShowNotification(L"Reset", L"Zoom and drawings cleared", RGB(220, 70, 70));
                 return 1;
             }
             if (p->vkCode == 'P') {
                 g_config.keepDrawingsOnRelease = !g_config.keepDrawingsOnRelease;
                 SaveConfig();
-                if (g_hwndSettings) InvalidateRect(g_hwndSettings, NULL, FALSE);
-
+                UpdateSettingsUI();
                 if (g_config.keepDrawingsOnRelease) {
                     g_app.persistentDrawingsActive = true;
-                    ShowNotification(L"Pin Mode", L"Drawings pinned on screen", RGB(46, 204, 113));
+                    ShowNotification(L"Pin Mode", L"Drawings pinned to screen", RGB(46, 204, 113));
                 }
                 else {
                     ResetDrawingState();
-                    ShowNotification(L"Pin Mode", L"Drawings unpinned & cleared", RGB(235, 60, 60));
+                    ShowNotification(L"Pin Mode", L"Drawings unpinned and cleared", RGB(235, 60, 60));
                 }
                 return 1;
             }
             if (p->vkCode == 'Z') {
-                if (UndoLastStroke()) {
-                    ShowNotification(L"Undo", L"Last drawing undone", RGB(120, 160, 255));
-                }
+                if (UndoLastStroke()) ShowNotification(L"Undo", L"Last stroke removed", RGB(120, 160, 255));
                 return 1;
             }
             if (p->vkCode == 'C') {
-                if (IsRectKeyPressed()) {
-                    StartCropSelection();
-                }
-                else if (g_hwndOverlay) {
-                    PostMessageW(g_hwndOverlay, WM_APP_TAKE_SCREENSHOT, 0, 0);
-                }
+                if (IsRectKeyPressed()) StartCropSelection();
+                else if (g_hwndOverlay) PostMessageW(g_hwndOverlay, WM_APP_TAKE_SCREENSHOT, 0, 0);
                 return 1;
             }
             if (p->vkCode == 'W') {
@@ -500,25 +563,13 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
                 return 1;
             }
             if (p->vkCode == 'H') {
-                if (g_app.activeToolMode == ActiveToolMode::Highlight) {
-                    g_app.activeToolMode = ActiveToolMode::None;
-                    ShowNotification(L"Highlighter", L"Mode disabled", RGB(180, 180, 180));
-                }
-                else {
-                    g_app.activeToolMode = ActiveToolMode::Highlight;
-                    ShowNotification(L"Highlighter", L"Mode enabled", RGB(250, 205, 40));
-                }
+                g_app.activeToolMode = (g_app.activeToolMode == ActiveToolMode::Highlight) ? ActiveToolMode::None : ActiveToolMode::Highlight;
+                ShowNotification(L"Highlighter", g_app.activeToolMode == ActiveToolMode::Highlight ? L"Enabled" : L"Disabled", RGB(250, 205, 40));
                 return 1;
             }
             if (p->vkCode == 'O') {
-                if (g_app.activeToolMode == ActiveToolMode::Blur) {
-                    g_app.activeToolMode = ActiveToolMode::None;
-                    ShowNotification(L"Blackout Blur", L"Mode disabled", RGB(180, 180, 180));
-                }
-                else {
-                    g_app.activeToolMode = ActiveToolMode::Blur;
-                    ShowNotification(L"Blackout Blur", L"Mode enabled", RGB(140, 140, 255));
-                }
+                g_app.activeToolMode = (g_app.activeToolMode == ActiveToolMode::Blur) ? ActiveToolMode::None : ActiveToolMode::Blur;
+                ShowNotification(L"Blur Redaction", g_app.activeToolMode == ActiveToolMode::Blur ? L"Enabled" : L"Disabled", RGB(140, 140, 255));
                 return 1;
             }
 
@@ -534,31 +585,8 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
                 g_app.inkOverrideSet = true;
                 if (!g_app.currentStroke.points.empty()) g_app.currentStroke.color = ink;
                 RedrawOverlay();
-                ShowNotification(L"Color Switched", colorName, ink);
+                ShowNotification(L"Pen Color", colorName, ink);
                 return 1;
-            }
-        }
-        else if (p->vkCode == VK_ESCAPE && isDown) {
-            if (g_app.cropMode) {
-                g_app.cropMode = false;
-                g_app.cropDragging = false;
-                SetCursor(LoadCursor(NULL, IDC_ARROW));
-                RedrawOverlay();
-                return 1;
-            }
-            if (g_app.boardMode != BoardMode::None) {
-                g_app.boardMode = BoardMode::None;
-                RedrawOverlay();
-                return 1;
-            }
-            if (!g_app.persistentDrawingsActive) {
-                bool hadActiveState = (g_currentZoom > 1.01f || !g_app.strokes.empty());
-                g_targetZoom = 1.0f;
-                g_currentZoom = 1.0f;
-                g_app.inkOverrideSet = false;
-                ResetDrawingState();
-                UpdateCamera();
-                if (hadActiveState) return 1;
             }
         }
     }
@@ -589,12 +617,8 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
             if (button == XBUTTON1) s_xbutton1Physical = false;
             else if (button == XBUTTON2) s_xbutton2Physical = false;
         }
-        else if (wParam == WM_MBUTTONDOWN) {
-            s_middlePhysical = true;
-        }
-        else if (wParam == WM_MBUTTONUP) {
-            s_middlePhysical = false;
-        }
+        else if (wParam == WM_MBUTTONDOWN) s_middlePhysical = true;
+        else if (wParam == WM_MBUTTONUP)   s_middlePhysical = false;
 
         if (wParam == WM_MBUTTONUP && s_swallowMiddleUp) {
             s_swallowMiddleUp = false;
@@ -602,14 +626,8 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
         }
         if (wParam == WM_XBUTTONUP || wParam == WM_NCXBUTTONUP) {
             const WORD button = HIWORD(pMouse->mouseData);
-            if (button == XBUTTON1 && s_swallowXButton1Up) {
-                s_swallowXButton1Up = false;
-                return 1;
-            }
-            if (button == XBUTTON2 && s_swallowXButton2Up) {
-                s_swallowXButton2Up = false;
-                return 1;
-            }
+            if (button == XBUTTON1 && s_swallowXButton1Up) { s_swallowXButton1Up = false; return 1; }
+            if (button == XBUTTON2 && s_swallowXButton2Up) { s_swallowXButton2Up = false; return 1; }
         }
 
         if (g_app.isTriggerHeld && !IsTriggerPhysicallyPressed()) {
@@ -625,14 +643,11 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
         if (g_app.breakTimer.active) {
             if (wParam == WM_LBUTTONDOWN) {
-                float cx = 0.0f;
-                float cy = 0.0f;
+                float cx = 0.0f, cy = 0.0f;
                 GetBreakTimerCenter(cx, cy);
-
                 int localX = pMouse->pt.x - GetSystemMetrics(SM_XVIRTUALSCREEN);
                 int localY = pMouse->pt.y - GetSystemMetrics(SM_YVIRTUALSCREEN);
 
-                // Clicked inside clock hit-box
                 if (localX >= (cx - 220) && localX <= (cx + 220) && localY >= (cy - 90) && localY <= (cy + 50)) {
                     g_app.breakTimer.editing = true;
                     g_app.breakTimer.paused = true;
@@ -666,23 +681,19 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
                 WORD xbtn = HIWORD(pMouse->mouseData);
                 pressedVk = (xbtn == XBUTTON1) ? VK_XBUTTON1 : VK_XBUTTON2;
             }
-            else if (wParam == WM_MBUTTONDOWN) {
-                pressedVk = VK_MBUTTON;
-            }
+            else if (wParam == WM_MBUTTONDOWN) pressedVk = VK_MBUTTON;
 
             if (pressedVk != 0) {
-                if (g_bindingMode == BindingMode::TriggerKey) {
-                    g_config.triggerKey = pressedVk;
-                }
-                else if (g_bindingMode == BindingMode::RectKey) {
-                    g_config.rectKey = pressedVk;
-                }
+                if (g_bindingMode == BindingMode::TriggerKey) g_config.triggerKey = pressedVk;
+                else if (g_bindingMode == BindingMode::RectKey) g_config.rectKey = pressedVk;
+                else if (g_bindingMode == BindingMode::FreezeKey) g_config.freezeKey = pressedVk;
+
                 if (pressedVk == VK_MBUTTON) s_swallowMiddleUp = true;
                 else if (pressedVk == VK_XBUTTON1) s_swallowXButton1Up = true;
                 else if (pressedVk == VK_XBUTTON2) s_swallowXButton2Up = true;
                 g_bindingMode = BindingMode::None;
                 SaveConfig();
-                if (g_hwndSettings) InvalidateRect(g_hwndSettings, NULL, FALSE);
+                UpdateSettingsUI();
                 return 1;
             }
         }
@@ -724,9 +735,7 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
         }
 
         if (g_config.triggerKey == VK_XBUTTON1 || g_config.triggerKey == VK_XBUTTON2 || g_config.triggerKey == VK_MBUTTON) {
-            bool isDown = false;
-            bool isUp = false;
-
+            bool isDown = false, isUp = false;
             if (g_config.triggerKey == VK_MBUTTON) {
                 if (wParam == WM_MBUTTONDOWN) isDown = true;
                 if (wParam == WM_MBUTTONUP) isUp = true;
@@ -740,17 +749,13 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
                 }
             }
 
-            if (isDown) {
-                g_app.isTriggerHeld = true;
-                return 1;
-            }
-            else if (isUp) {
-                HandleTriggerRelease();
-                return 1;
-            }
+            if (isDown) { g_app.isTriggerHeld = true; return 1; }
+            else if (isUp) { HandleTriggerRelease(); return 1; }
         }
 
-        if (g_app.isTriggerHeld) {
+        const bool activeForDrawing = g_app.isTriggerHeld || g_app.freezeMode;
+
+        if (activeForDrawing) {
             if (wParam == WM_MOUSEWHEEL) {
                 short delta = GET_WHEEL_DELTA_WPARAM(pMouse->mouseData);
                 g_targetZoom += (delta > 0) ? 0.25f : -0.25f;
@@ -760,12 +765,15 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
                 return 1;
             }
 
-            if (wParam == WM_MBUTTONDOWN && g_config.triggerKey != VK_MBUTTON) {
+            if (wParam == WM_MBUTTONDOWN && (g_app.freezeMode || g_config.triggerKey != VK_MBUTTON)) {
                 Stroke badge;
                 badge.type = StrokeType::Badge;
                 badge.points = { pMouse->pt };
                 badge.badgeNumber = g_app.stepCounter++;
-                if (g_app.laserMode) badge.birthTick = GetTickCount64();
+                const bool isLaser = g_app.freezeMode ? g_app.laserMode : g_config.holdUsesLaser;
+                if (isLaser) {
+                    badge.birthTick = GetTickCount64();
+                }
                 g_app.strokes.push_back(badge);
                 s_swallowMiddleUp = true;
                 RedrawOverlay();
@@ -842,7 +850,7 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
                     }
                 }
                 else if (g_app.currentStroke.points.size() > 1 &&
-                         (g_app.isDrawRectangle || g_app.isDrawingBlur || g_app.isDrawingHighlight)) {
+                    (g_app.isDrawRectangle || g_app.isDrawingBlur || g_app.isDrawingHighlight)) {
                     g_app.currentStroke.points.back() = np;
                 }
                 else {
@@ -856,13 +864,15 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
             if (lmbRelease || (wParam == WM_RBUTTONUP && g_app.isDrawingArrow)) {
                 bool wasLine = (wParam == WM_LBUTTONUP && g_app.isDrawingLine);
                 bool wasRect = (wParam == WM_LBUTTONUP && g_app.isDrawRectangle);
-                bool wasBlur = (wParam == WM_LBUTTONUP && g_app.isDrawingBlur);
 
                 g_app.isDrawingLine = g_app.isDrawRectangle = g_app.isDrawingArrow = g_app.isDrawingHighlight = g_app.isDrawingBlur = false;
 
                 if (g_app.currentStroke.points.size() > 1) {
-                    if (g_app.laserMode) g_app.currentStroke.birthTick = GetTickCount64();
-                    if (wasBlur) {
+                    const bool isLaser = g_app.freezeMode ? g_app.laserMode : g_config.holdUsesLaser;
+                    if (isLaser) {
+                        g_app.currentStroke.birthTick = GetTickCount64();
+                    }
+                    if (wParam == WM_LBUTTONUP && g_app.currentStroke.type == StrokeType::Blur) {
                         POINT a = g_app.currentStroke.points.front();
                         POINT b = g_app.currentStroke.points.back();
                         RECT rc = { std::min(a.x, b.x), std::min(a.y, b.y), std::max(a.x, b.x), std::max(a.y, b.y) };
@@ -881,6 +891,14 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
                 RedrawOverlay();
                 if ((wasLine || wasRect) && g_currentZoom <= 1.0f) UpdateCamera();
                 return 1;
+            }
+
+            if (g_app.freezeMode) {
+                if (wParam == WM_LBUTTONDOWN || wParam == WM_LBUTTONUP ||
+                    wParam == WM_RBUTTONDOWN || wParam == WM_RBUTTONUP ||
+                    wParam == WM_MBUTTONDOWN || wParam == WM_MBUTTONUP) {
+                    return 1;
+                }
             }
         }
     }

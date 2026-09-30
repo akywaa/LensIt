@@ -5,7 +5,7 @@ A lightweight desktop screen magnifier and annotation tool for Windows. Inspired
 ## Features
 
 - Fullscreen cursor-centered magnification using Windows Magnification API
-- Annotations: freehand pen, directional arrows, rectangles, highlighter, and step badges (1, 2, 3...)
+- Annotations: freehand pen, directional arrows, rectangles, highlighter, and step badges
 - Privacy blur box for redacting sensitive screen areas
 - Auto-fading laser ink and spotlight mode
 - Built-in break countdown timer

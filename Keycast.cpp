@@ -1,5 +1,6 @@
 #include "Keycast.h"
 #include "LensIt.h"
+#include "Canvas.h"
 
 static const ULONGLONG KEYCAST_FADE_IN_MS = 150;
 static const ULONGLONG KEYCAST_FADE_OUT_MS = 200;
@@ -9,16 +10,6 @@ static float s_keycastAlpha = 0.0f;
 static ULONGLONG s_keycastShownTick = 0;
 static bool s_prevKeycast = false;
 static std::wstring s_prevKeycastValue;
-
-static void AddRoundedRectPath(GraphicsPath& path, REAL x, REAL y, REAL w, REAL h, REAL radius) {
-    const REAL r = std::min(radius, std::min(w, h) / 2.0f);
-    const REAL d = r * 2.0f;
-    path.AddArc(x, y, d, d, 180.0f, 90.0f);
-    path.AddArc(x + w - d, y, d, d, 270.0f, 90.0f);
-    path.AddArc(x + w - d, y + h - d, d, d, 0.0f, 90.0f);
-    path.AddArc(x, y + h - d, d, d, 90.0f, 90.0f);
-    path.CloseFigure();
-}
 
 static std::vector<std::wstring> SplitKeycastCombo(const std::wstring& combo) {
     std::vector<std::wstring> parts;
@@ -69,7 +60,7 @@ void UpdateKeycastState(bool& framePending) {
         float ramp = std::min(1.0f, std::min(
             static_cast<float>(elapsed) / static_cast<float>(KEYCAST_FADE_IN_MS),
             static_cast<float>(remaining) / static_cast<float>(KEYCAST_FADE_OUT_MS)));
-        
+
         if (ramp < 1.0f) framePending = true;
         s_keycastAlpha = ramp;
     }
@@ -125,12 +116,12 @@ void DrawKeycastUI(Graphics& g, const POINT& toastAnchor, int toastW) {
     const float cardY = slotBottom - cardH + slide;
 
     GraphicsPath shadowPath;
-    AddRoundedRectPath(shadowPath, cardX, cardY + 4.0f, cardW, cardH, cardRadius);
+    AddRoundedRect(shadowPath, cardX, cardY + 4.0f, cardW, cardH, cardRadius);
     SolidBrush shadowBrush(WithFade(Color(85, 0, 0, 0), fade));
     g.FillPath(&shadowBrush, &shadowPath);
 
     GraphicsPath cardPath;
-    AddRoundedRectPath(cardPath, cardX, cardY, cardW, cardH, cardRadius);
+    AddRoundedRect(cardPath, cardX, cardY, cardW, cardH, cardRadius);
     LinearGradientBrush cardBrush(RectF(cardX, cardY, cardW, cardH), WithFade(Color(240, 34, 36, 47), fade), WithFade(Color(240, 15, 16, 23), fade), LinearGradientModeVertical);
     g.FillPath(&cardBrush, &cardPath);
     Pen cardPen(WithFade(Color(210, 120, 122, 148), fade), 1.0f);
@@ -143,7 +134,7 @@ void DrawKeycastUI(Graphics& g, const POINT& toastAnchor, int toastW) {
         const bool isModifier = IsModifierKeyName(parts[i]);
 
         GraphicsPath capPath;
-        AddRoundedRectPath(capPath, cursorX, capY, capWidths[i], capHeight, capRadius);
+        AddRoundedRect(capPath, cursorX, capY, capWidths[i], capHeight, capRadius);
         LinearGradientBrush capBrush(capRect,
             WithFade(isModifier ? Color(255, 84, 122, 216) : Color(255, 92, 92, 108), fade),
             WithFade(isModifier ? Color(255, 38, 72, 158) : Color(255, 48, 48, 60), fade),

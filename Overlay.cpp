@@ -59,16 +59,6 @@ std::filesystem::path ConfigPath() {
     return WritableConfigPath(std::filesystem::path(buffer).parent_path() / kConfigFileName);
 }
 
-void AddRoundedRect(GraphicsPath& path, REAL x, REAL y, REAL w, REAL h, REAL radius) {
-    const REAL r = std::min(radius, std::min(w, h) / 2.0f);
-    const REAL d = r * 2.0f;
-    path.AddArc(x, y, d, d, 180.0f, 90.0f);
-    path.AddArc(x + w - d, y, d, d, 270.0f, 90.0f);
-    path.AddArc(x + w - d, y + h - d, d, d, 0.0f, 90.0f);
-    path.AddArc(x, y + h - d, d, d, 90.0f, 90.0f);
-    path.CloseFigure();
-}
-
 }
 
 void LoadConfig() {

@@ -1,6 +1,7 @@
 #pragma once
 #include "LensIt.h"
 
+void AddRoundedRect(Gdiplus::GraphicsPath& path, Gdiplus::REAL x, Gdiplus::REAL y, Gdiplus::REAL w, Gdiplus::REAL h, Gdiplus::REAL radius);
 void DrawStroke(Gdiplus::Graphics& g, const Stroke& stroke, int offX, int offY);
 void DrawArrow(Gdiplus::Graphics& g, Gdiplus::Pen& pen, Gdiplus::SolidBrush& brush, POINT p1, POINT p2, int width, int offX, int offY);
 std::shared_ptr<Gdiplus::Bitmap> BakeBlurredBitmap(RECT rc);

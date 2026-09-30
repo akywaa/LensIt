@@ -19,6 +19,9 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="BreakTimer.h" />
+    <ClInclude Include="Canvas.h" />
+    <ClInclude Include="Keycast.h" />
     <ClInclude Include="LensIt.h" />
     <ClInclude Include="WinHandles.h" />
     <ClInclude Include="resource.h" />
@@ -27,8 +30,11 @@
     <ResourceCompile Include="resource.rc" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="BreakTimer.cpp" />
+    <ClCompile Include="Canvas.cpp" />
     <ClCompile Include="Hooks.cpp" />
     <ClCompile Include="Installer.cpp" />
+    <ClCompile Include="Keycast.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Overlay.cpp" />
     <ClCompile Include="Settings.cpp" />

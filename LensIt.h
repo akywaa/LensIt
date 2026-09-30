@@ -49,7 +49,7 @@ struct Stroke {
     std::vector<POINT> points;
     int badgeNumber = 0;
     COLORREF color = 0;
-    std::shared_ptr<Bitmap> cachedBitmap = nullptr;
+    std::shared_ptr<Gdiplus::Bitmap> cachedBitmap = nullptr;
     RECT cachedRect = { 0, 0, 0, 0 };
     float opacity = 1.0f;
     ULONGLONG birthTick = 0;
@@ -119,7 +119,6 @@ struct AppState {
 };
 
 extern AppState g_app;
-
 extern AppConfig g_config;
 extern HWND g_hwndOverlay;
 extern HWND g_hwndSettings;
@@ -131,30 +130,20 @@ extern float g_camX;
 extern float g_camY;
 extern HICON g_appIcon;
 extern NOTIFYICONDATA g_nid;
-
-void StartBreakTimer(int minutes = 5);
-void StopBreakTimer();
-void ToggleBreakTimer(int minutes = 5);
-void CommitBreakTimerInput();
-void GetBreakTimerCenter(float& cx, float& cy);
+extern UINT WM_TASKBARCREATED;
 
 LRESULT CALLBACK OverlayWndProc(HWND, UINT, WPARAM, LPARAM);
 LRESULT CALLBACK SettingsWndProc(HWND, UINT, WPARAM, LPARAM);
 LRESULT CALLBACK ToastWndProc(HWND, UINT, WPARAM, LPARAM);
 LRESULT CALLBACK LowLevelKeyboardProc(int, WPARAM, LPARAM);
 LRESULT CALLBACK LowLevelMouseProc(int, WPARAM, LPARAM);
-
-extern UINT WM_TASKBARCREATED;
+LRESULT CALLBACK WelcomeWndProc(HWND, UINT, WPARAM, LPARAM);
 
 void UpdateCamera();
 void RepositionOverlay();
 void CreateOverlayBackbuffer();
 void DestroyOverlayBackbuffer();
 void PresentOverlayFrame();
-void CopyScreenshotToClipboard();
-void CopyRegionToClipboard(RECT rcScreen);
-void StartCropSelection();
-bool UndoLastStroke();
 void RedrawOverlay();
 void ResetDrawingState();
 void SyncOverlayVisibility();
@@ -166,6 +155,7 @@ void InitToastWindow(HINSTANCE hInstance);
 void ApplyToastCaptureAffinity();
 
 void ShowSettingsWindow(HINSTANCE);
+void ShowWelcomeWindow(HINSTANCE);
 void InitTray(HWND, HINSTANCE);
 std::wstring GetKeyNameStr(DWORD vkCode);
 bool IsKeyMatching(DWORD vkCode, DWORD targetKey);
@@ -177,8 +167,10 @@ bool RequiresZoomTimer();
 void LoadConfig();
 void SaveConfig();
 
-LRESULT CALLBACK WelcomeWndProc(HWND, UINT, WPARAM, LPARAM);
-void ShowWelcomeWindow(HINSTANCE);
 bool SetAutoStart(bool enable);
 bool IsAutoStartEnabled();
 bool CreateDesktopShortcut();
+
+#include "Canvas.h"
+#include "BreakTimer.h"
+#include "Keycast.h"

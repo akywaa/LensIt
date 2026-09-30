@@ -73,54 +73,64 @@ struct AppConfig {
     bool isFirstRun = true;
 };
 
+enum class ActiveToolMode { None, Highlight, Blur };
+enum class BoardMode { None, White, Dark };
+
+struct AppState {
+    bool isTriggerHeld = false;
+    bool isDrawingLine = false;
+    bool isDrawingArrow = false;
+    bool isDrawRectangle = false;
+    bool isDrawingHighlight = false;
+    bool isDrawingBlur = false;
+    bool persistentDrawingsActive = false;
+    ActiveToolMode activeToolMode = ActiveToolMode::None;
+    BoardMode boardMode = BoardMode::None;
+    bool laserMode = false;
+    bool spotlightMode = false;
+    bool keycastEnabled = true;
+    bool textInputActive = false;
+
+    COLORREF inkOverride = 0;
+    bool inkOverrideSet = false;
+    Stroke textDraft;
+
+    bool cropMode = false;
+    bool cropDragging = false;
+    POINT cropStart = { 0, 0 };
+    POINT cropEnd = { 0, 0 };
+
+    bool keycastText = false;
+    std::wstring keycastTextValue;
+    ULONGLONG keycastUntilTick = 0;
+
+    int stepCounter = 1;
+    std::vector<Stroke> strokes;
+    Stroke currentStroke;
+
+    struct {
+        bool active = false;
+        bool paused = false;
+        bool editing = false;
+        int totalSec = 300;
+        int remainingSec = 300;
+        std::wstring inputStr;
+    } breakTimer;
+};
+
+extern AppState g_app;
+
 extern AppConfig g_config;
 extern HWND g_hwndOverlay;
 extern HWND g_hwndSettings;
 extern HWND g_hwndToast;
-extern bool g_isTriggerHeld;
-extern bool g_isDrawingLine;
-extern bool g_isDrawingArrow;
-extern bool g_isDrawRectangle;
 extern BindingMode g_bindingMode;
 extern float g_currentZoom;
 extern float g_targetZoom;
 extern float g_camX;
 extern float g_camY;
-extern int g_stepCounter;
-extern std::vector<Stroke> g_strokes;
-extern Stroke g_currentStroke;
 extern HICON g_appIcon;
 extern NOTIFYICONDATA g_nid;
-extern bool g_isDrawingHighlight;
-extern bool g_isDrawingBlur;
-extern COLORREF g_inkOverride;
-extern bool g_inkOverrideSet;
-extern bool g_persistentDrawingsActive;
-
-enum class ActiveToolMode { None, Highlight, Blur };
-enum class BoardMode { None, White, Dark };
-extern ActiveToolMode g_activeToolMode;
-extern BoardMode g_boardMode;
-extern bool g_cropMode;
-extern bool g_cropDragging;
-extern POINT g_cropStart;
-extern POINT g_cropEnd;
-extern bool g_laserMode;
-extern bool g_spotlightMode;
-extern bool g_keycastEnabled;
-extern bool g_isTextInputActive;
-extern Stroke g_textDraft;
-extern bool g_keycastText;
-extern std::wstring g_keycastTextValue;
-extern ULONGLONG g_keycastUntilTick;
-
-// Break Timer state
-extern bool g_isBreakTimerActive;
-extern bool g_isBreakTimerPaused;
-extern bool g_isBreakTimerEditing;
-extern int g_breakTimerTotalSec;
-extern int g_breakTimerRemainingSec;
-extern std::wstring g_breakTimerInputStr;
 
 void StartBreakTimer(int minutes = 5);
 void StopBreakTimer();

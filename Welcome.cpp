@@ -26,14 +26,6 @@ constexpr int kRowShortcutBoxTop = 314;
 constexpr int kRowGap = 4;
 
 constexpr int kCheckboxSize = 18;
-constexpr int kCheckInset = 3;
-constexpr int kCheckInsetSize = 12;
-constexpr int kCheckMarkInsetLeft = 4;
-constexpr int kCheckMarkInsetMid = 8;
-constexpr int kCheckMarkInsetRight = 15;
-constexpr int kCheckMarkTop = 6;
-constexpr int kCheckMarkMidTop = 9;
-constexpr int kCheckMarkBottom = 14;
 constexpr int kCheckboxLabelGap = 10;
 
 constexpr int kButtonLeft = 30;
@@ -73,13 +65,13 @@ static void DrawCheckbox(Graphics& g, const RECT& box, bool checked) {
     if (!checked) return;
 
     SolidBrush accentBlue(Color(0, 122, 204));
-    g.FillRectangle(&accentBlue, box.left + kCheckInset, box.top + kCheckInset, kCheckInsetSize, kCheckInsetSize);
+    g.FillRectangle(&accentBlue, box.left + 3, box.top + 3, 12, 12);
 
     Pen checkPen(Color(255, 255, 255), 2.0f);
     Point pts[3] = {
-        Point(box.left + kCheckMarkInsetLeft, box.top + kCheckMarkMidTop),
-        Point(box.left + kCheckMarkInsetMid, box.top + kCheckMarkBottom),
-        Point(box.left + kCheckMarkInsetRight, box.top + kCheckMarkTop)
+        Point(box.left + 4, box.top + 9),
+        Point(box.left + 8, box.top + 14),
+        Point(box.left + 15, box.top + 6)
     };
     g.DrawLines(&checkPen, pts, 3);
 }

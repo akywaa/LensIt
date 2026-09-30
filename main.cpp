@@ -2,39 +2,17 @@
 #include "WinHandles.h"
 
 AppConfig g_config;
+AppState g_app;
 HWND g_hwndOverlay = NULL;
 HWND g_hwndSettings = NULL;
 HWND g_hwndToast = NULL;
-bool g_isTriggerHeld = false;
-bool g_isDrawingLine = false;
-bool g_isDrawingArrow = false;
-bool g_isDrawRectangle = false;
 BindingMode g_bindingMode = BindingMode::None;
 float g_currentZoom = 1.0f;
 float g_targetZoom = 1.0f;
 float g_camX = 0.0f;
 float g_camY = 0.0f;
-int g_stepCounter = 1;
-std::vector<Stroke> g_strokes;
-Stroke g_currentStroke;
 HICON g_appIcon = NULL;
 NOTIFYICONDATA g_nid = { sizeof(NOTIFYICONDATA) };
-bool g_isDrawingHighlight = false;
-bool g_isDrawingBlur = false;
-COLORREF g_inkOverride = 0;
-bool g_inkOverrideSet = false;
-bool g_persistentDrawingsActive = false;
-ActiveToolMode g_activeToolMode = ActiveToolMode::None;
-BoardMode g_boardMode = BoardMode::None;
-bool g_cropMode = false;
-bool g_cropDragging = false;
-POINT g_cropStart = { 0, 0 };
-POINT g_cropEnd = { 0, 0 };
-bool g_laserMode = false;
-bool g_spotlightMode = false;
-bool g_keycastEnabled = true;
-bool g_isTextInputActive = false;
-Stroke g_textDraft;
 
 typedef BOOL(WINAPI* pfnMagSetFullscreenUseBitmapSmoothing)(BOOL);
 typedef BOOL(WINAPI* pfnMagSetFullscreenWindowFilterList)(DWORD, int, HWND*);
@@ -82,7 +60,7 @@ void StopZoomTimer() {
 }
 
 bool RequiresZoomTimer() {
-    if (g_isDrawingLine || g_isDrawingArrow || g_isDrawRectangle || g_isDrawingHighlight || g_isDrawingBlur) return true;
+    if (g_app.isDrawingLine || g_app.isDrawingArrow || g_app.isDrawRectangle || g_app.isDrawingHighlight || g_app.isDrawingBlur) return true;
     if (fabsf(g_currentZoom - g_targetZoom) > 0.001f) return true;
     return false;
 }
@@ -205,9 +183,9 @@ int APIENTRY WinMain(
     DestroyOverlayBackbuffer();
     MagSetFullscreenTransform(1.0f, 0, 0);
     MagUninitialize();
-    g_strokes.clear();
-    g_currentStroke = Stroke();
-    g_textDraft = Stroke();
+    g_app.strokes.clear();
+    g_app.currentStroke = Stroke();
+    g_app.textDraft = Stroke();
     GdiplusShutdown(gdiplusToken);
     if (SUCCEEDED(hrCo)) CoUninitialize();
     if (g_appIcon) DestroyIcon(g_appIcon);

@@ -5,9 +5,9 @@
 
 # LensIt
 
-**A tiny screen magnifier, annotation tool and break timer for Windows.**
+**Small screen magnifier, annotation tool and break timer for Windows.**
 
-Hold a key and scroll to zoom in on anything, draw lines, arrows and rectangles, drop numbered step badges, blur out sensitive data, or pop up a countdown timer over your screen. Useful for presentations, tutorials, streams, lectures, bug reports, whatever needs pointing at.
+Hold a key and scroll to zoom in on the cursor, draw lines, arrows and rectangles, mark steps, blur out sensitive data, or run a countdown timer over your screen. Useful for presentations, tutorials, streams, lectures and bug reports.
 
 [Features](#-features) • [Usage](#-usage) • [Break Timer](#-break-countdown-timer) • [Settings](#-settings) • [Installation](#-installation) • [Building from source](#-building-from-source) • [Русская версия](#-lensit-русская-версия)
 
@@ -62,12 +62,9 @@ Hold a key and scroll to zoom in on anything, draw lines, arrows and rectangles,
 | Reset zoom & clear drawings | `Esc` |
 | Open settings / Exit | Right-click the tray icon |
 
-> [!TIP]
-> By default, releasing the trigger key clears unpinned drawings. You can toggle "Keep drawings on screen" or turn on "Reset zoom on release" in settings if you want different behavior.
+> **Note:** By default, releasing the trigger key clears unpinned drawings. You can toggle "Keep drawings on screen" or turn on "Reset zoom on release" in settings if you want different behavior.
 
-> [!WARNING]
-> **Note for gamers:** LensIt overlays the screen and hooks into system-wide magnification, so it won't work over apps running in true exclusive fullscreen (Geometry Dash, Counter-Strike 2, and a lot of other games behave this way).
-> If you want to use LensIt with a game like that, switch its display mode to Borderless / Windowed Borderless, or plain Windowed, in the game's video settings.
+> **Note for gamers:** LensIt overlays the screen and hooks into system-wide magnification, so it won't work over apps running in true exclusive fullscreen (Geometry Dash, Counter-Strike 2, and a lot of other games behave this way). Switch the game to Borderless / Windowed Borderless, or plain Windowed, in its video settings to use LensIt.
 
 ## Break Countdown Timer
 
@@ -132,11 +129,11 @@ The compiled binary will be located in the `x64/Release/` directory. All require
 
 <div align="center">
 
-# 🔎 LensIt - русская версия
+# LensIt - русская версия
 
 **Компактная лупа для экрана с инструментами аннотаций и таймером перерыва для Windows.**
 
-Зажимаешь клавишу, крутишь колесо мыши - приближаешь нужную область. Можно рисовать линии, стрелки, прямоугольники, ставить шаги, размывать конфиденциальные данные или запускать таймер перерыва прямо поверх экрана. Пригодится для презентаций, обучающих видео, лекций, стримов, баг-репортов.
+Зажимаешь клавишу, крутишь колесо мыши - приближаешь нужную область. Можно рисовать линии, стрелки, прямоугольники, ставить номера шагов, размывать конфиденциальные данные или запускать таймер перерыва прямо поверх экрана. Пригодится для презентаций, лекций, стримов и обучающих видео.
 
 [Возможности](#-возможности) • [Использование](#-использование) • [Таймер перерыва](#-таймер-перерыва-break-timer) • [Настройки](#-настройки) • [Установка](#-установка) • [Сборка из исходников](#-сборка-из-исходников)
 
@@ -191,12 +188,9 @@ The compiled binary will be located in the `x64/Release/` directory. All require
 | Сбросить приближение и рисунки | `Esc` |
 | Открыть настройки / выйти | ПКМ по иконке в трее |
 
-> [!TIP]
-> По умолчанию при отпускании клавиши-триггера незакреплённые рисунки исчезают. Это можно поменять через "Keep drawings on screen" или включить "Reset zoom on release" в настройках.
+> **Примечание:** по умолчанию при отпускании клавиши-триггера незакреплённые рисунки исчезают. Это можно поменять через "Keep drawings on screen" или включить "Reset zoom on release" в настройках.
 
-> [!WARNING]
-> **Для геймеров:** LensIt накладывается поверх экрана и цепляется к системному масштабированию, поэтому не работает поверх игр в настоящем exclusive fullscreen режиме (Geometry Dash, Counter-Strike 2 и многие другие так себя ведут).
-> Чтобы LensIt заработал, переключи игру на Borderless / Windowed Borderless или обычный оконный режим в настройках графики.
+> **Примечание для геймеров:** LensIt накладывается поверх экрана и цепляется к системному масштабированию, поэтому не работает поверх игр в настоящем exclusive fullscreen режиме (Geometry Dash, Counter-Strike 2 и многие другие так себя ведут). Чтобы LensIt заработал, переключи игру на Borderless / Windowed Borderless или обычный оконный режим в настройках графики.
 
 ## Таймер перерыва (Break Timer)
 
@@ -249,7 +243,7 @@ The compiled binary will be located in the `x64/Release/` directory. All require
 
 Готовый исполняемый файл появится в папке `x64/Release/`. Все библиотеки (`magnification.lib`, `gdiplus.lib` и др.) входят в стандартный Windows SDK - ничего дополнительно ставить не нужно.
 
-## 🧩 Технологии
+## Технологии
 
 - C++ на нативном Win32 API
 - Windows Magnification API для аппаратного масштабирования

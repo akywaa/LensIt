@@ -3,8 +3,6 @@
 
 #include <filesystem>
 #include <fstream>
-#include <map>
-#include <string_view>
 #include <shlobj.h>
 #include <knownfolders.h>
 
@@ -35,18 +33,8 @@ static ULONGLONG s_keycastShownTick = 0;
 
 static bool s_framePending = false;
 
-bool g_keycastText = false;
-std::wstring g_keycastTextValue;
-ULONGLONG g_keycastUntilTick = 0;
 static POINT s_cursorPos = { 0, 0 };
 
-// Break timer variables
-bool g_isBreakTimerActive = false;
-bool g_isBreakTimerPaused = false;
-bool g_isBreakTimerEditing = false;
-int g_breakTimerTotalSec = 300;
-int g_breakTimerRemainingSec = 300;
-std::wstring g_breakTimerInputStr;
 static float s_breakTimerCenterX = 0.0f;
 static float s_breakTimerCenterY = 0.0f;
 
@@ -82,75 +70,49 @@ std::filesystem::path ConfigPath() {
     return WritableConfigPath(std::filesystem::path(buffer).parent_path() / kConfigFileName);
 }
 
-std::map<std::string, long long> ReadConfigValues() {
-    std::map<std::string, long long> values;
-    std::ifstream file(ConfigPath());
-    std::string line;
-    while (std::getline(file, line)) {
-        std::string_view view(line);
-        const size_t firstNonSpace = view.find_first_not_of(" \t\r");
-        if (firstNonSpace == std::string_view::npos) continue;
-        view.remove_prefix(firstNonSpace);
-        if (view.front() == '#' || view.front() == ';' || view.front() == '[') continue;
-
-        const size_t separator = view.find('=');
-        if (separator == std::string_view::npos) continue;
-
-        std::string_view key = view.substr(0, separator);
-        std::string_view value = view.substr(separator + 1);
-        while (!key.empty() && (key.back() == ' ' || key.back() == '\t')) key.remove_suffix(1);
-        while (!value.empty() && (value.front() == ' ' || value.front() == '\t')) value.remove_prefix(1);
-
-        try {
-            values[std::string(key)] = std::stoll(std::string(value));
-        }
-        catch (const std::exception&) {
-        }
-    }
-    return values;
-}
-
-long long ConfigValue(const std::map<std::string, long long>& values, const char* key, long long fallback) {
-    const auto it = values.find(key);
-    return (it == values.end()) ? fallback : it->second;
-}
-
 }
 
 void LoadConfig() {
-    const std::map<std::string, long long> values = ReadConfigValues();
-    g_config.triggerKey = static_cast<DWORD>(ConfigValue(values, "TriggerKey", static_cast<int>(g_config.triggerKey)));
-    g_config.rectKey = static_cast<DWORD>(ConfigValue(values, "RectKey", static_cast<int>(g_config.rectKey)));
-    g_config.lineColor = static_cast<COLORREF>(ConfigValue(values, "LineColor", static_cast<int>(g_config.lineColor)));
-    g_config.lineWidth = static_cast<int>(ConfigValue(values, "LineWidth", g_config.lineWidth));
-    g_config.arrowColor = static_cast<COLORREF>(ConfigValue(values, "ArrowColor", static_cast<int>(g_config.arrowColor)));
-    g_config.arrowWidth = static_cast<int>(ConfigValue(values, "ArrowWidth", g_config.arrowWidth));
-    g_config.rectColor = static_cast<COLORREF>(ConfigValue(values, "RectColor", static_cast<int>(g_config.rectColor)));
-    g_config.rectWidth = static_cast<int>(ConfigValue(values, "RectWidth", g_config.rectWidth));
-    g_config.badgeColor = static_cast<COLORREF>(ConfigValue(values, "BadgeColor", static_cast<int>(g_config.badgeColor)));
-    g_config.resetZoomOnRelease = ConfigValue(values, "ResetZoomOnRelease", g_config.resetZoomOnRelease ? 1 : 0) != 0;
-    g_config.keepDrawingsOnRelease = ConfigValue(values, "KeepDrawingsOnRelease", g_config.keepDrawingsOnRelease ? 1 : 0) != 0;
-    g_config.hideToastsFromCapture = ConfigValue(values, "HideToastsFromCapture", g_config.hideToastsFromCapture ? 1 : 0) != 0;
-    g_config.isFirstRun = ConfigValue(values, "FirstRun", 1) != 0;
+    const std::wstring path = ConfigPath().wstring();
+
+    g_config.triggerKey = GetPrivateProfileIntW(L"Settings", L"TriggerKey", g_config.triggerKey, path.c_str());
+    g_config.rectKey = GetPrivateProfileIntW(L"Settings", L"RectKey", g_config.rectKey, path.c_str());
+    g_config.lineColor = static_cast<COLORREF>(GetPrivateProfileIntW(L"Settings", L"LineColor", g_config.lineColor, path.c_str()));
+    g_config.lineWidth = static_cast<int>(GetPrivateProfileIntW(L"Settings", L"LineWidth", g_config.lineWidth, path.c_str()));
+    g_config.arrowColor = static_cast<COLORREF>(GetPrivateProfileIntW(L"Settings", L"ArrowColor", g_config.arrowColor, path.c_str()));
+    g_config.arrowWidth = static_cast<int>(GetPrivateProfileIntW(L"Settings", L"ArrowWidth", g_config.arrowWidth, path.c_str()));
+    g_config.rectColor = static_cast<COLORREF>(GetPrivateProfileIntW(L"Settings", L"RectColor", g_config.rectColor, path.c_str()));
+    g_config.rectWidth = static_cast<int>(GetPrivateProfileIntW(L"Settings", L"RectWidth", g_config.rectWidth, path.c_str()));
+    g_config.badgeColor = static_cast<COLORREF>(GetPrivateProfileIntW(L"Settings", L"BadgeColor", g_config.badgeColor, path.c_str()));
+    g_config.resetZoomOnRelease = GetPrivateProfileIntW(L"Settings", L"ResetZoomOnRelease", g_config.resetZoomOnRelease ? 1 : 0, path.c_str()) != 0;
+    g_config.keepDrawingsOnRelease = GetPrivateProfileIntW(L"Settings", L"KeepDrawingsOnRelease", g_config.keepDrawingsOnRelease ? 1 : 0, path.c_str()) != 0;
+    g_config.hideToastsFromCapture = GetPrivateProfileIntW(L"Settings", L"HideToastsFromCapture", g_config.hideToastsFromCapture ? 1 : 0, path.c_str()) != 0;
+    g_config.isFirstRun = GetPrivateProfileIntW(L"Settings", L"FirstRun", 1, path.c_str()) != 0;
 }
 
 void SaveConfig() {
-    std::ofstream file(ConfigPath(), std::ios::trunc);
-    if (!file) return;
+    const std::wstring path = ConfigPath().wstring();
 
-    file << "TriggerKey=" << g_config.triggerKey << '\n';
-    file << "RectKey=" << g_config.rectKey << '\n';
-    file << "LineColor=" << g_config.lineColor << '\n';
-    file << "LineWidth=" << g_config.lineWidth << '\n';
-    file << "ArrowColor=" << g_config.arrowColor << '\n';
-    file << "ArrowWidth=" << g_config.arrowWidth << '\n';
-    file << "RectColor=" << g_config.rectColor << '\n';
-    file << "RectWidth=" << g_config.rectWidth << '\n';
-    file << "BadgeColor=" << g_config.badgeColor << '\n';
-    file << "ResetZoomOnRelease=" << (g_config.resetZoomOnRelease ? 1 : 0) << '\n';
-    file << "KeepDrawingsOnRelease=" << (g_config.keepDrawingsOnRelease ? 1 : 0) << '\n';
-    file << "HideToastsFromCapture=" << (g_config.hideToastsFromCapture ? 1 : 0) << '\n';
-    file << "FirstRun=" << (g_config.isFirstRun ? 1 : 0) << '\n';
+    auto writeInt = [&path](const wchar_t* key, LONG value) {
+        WritePrivateProfileStringW(L"Settings", key, std::to_wstring(value).c_str(), path.c_str());
+    };
+    auto writeBool = [&path](const wchar_t* key, bool value) {
+        WritePrivateProfileStringW(L"Settings", key, value ? L"1" : L"0", path.c_str());
+    };
+
+    writeInt(L"TriggerKey", g_config.triggerKey);
+    writeInt(L"RectKey", g_config.rectKey);
+    writeInt(L"LineColor", g_config.lineColor);
+    writeInt(L"LineWidth", g_config.lineWidth);
+    writeInt(L"ArrowColor", g_config.arrowColor);
+    writeInt(L"ArrowWidth", g_config.arrowWidth);
+    writeInt(L"RectColor", g_config.rectColor);
+    writeInt(L"RectWidth", g_config.rectWidth);
+    writeInt(L"BadgeColor", g_config.badgeColor);
+    writeBool(L"ResetZoomOnRelease", g_config.resetZoomOnRelease);
+    writeBool(L"KeepDrawingsOnRelease", g_config.keepDrawingsOnRelease);
+    writeBool(L"HideToastsFromCapture", g_config.hideToastsFromCapture);
+    writeBool(L"FirstRun", g_config.isFirstRun);
 }
 
 static bool ParseTimerString(const std::wstring& s, int& outSec) {
@@ -180,12 +142,12 @@ static bool ParseTimerString(const std::wstring& s, int& outSec) {
 
 void StartBreakTimer(int minutes) {
     if (minutes < 1) minutes = 1;
-    g_breakTimerTotalSec = minutes * 60;
-    g_breakTimerRemainingSec = g_breakTimerTotalSec;
-    g_isBreakTimerActive = true;
-    g_isBreakTimerPaused = false;
-    g_isBreakTimerEditing = false;
-    g_breakTimerInputStr.clear();
+    g_app.breakTimer.totalSec = minutes * 60;
+    g_app.breakTimer.remainingSec = g_app.breakTimer.totalSec;
+    g_app.breakTimer.active = true;
+    g_app.breakTimer.paused = false;
+    g_app.breakTimer.editing = false;
+    g_app.breakTimer.inputStr.clear();
     ComputeBreakTimerCenter(s_breakTimerCenterX, s_breakTimerCenterY);
 
     if (g_hwndOverlay) {
@@ -196,11 +158,11 @@ void StartBreakTimer(int minutes) {
 }
 
 void StopBreakTimer() {
-    if (!g_isBreakTimerActive) return;
-    g_isBreakTimerActive = false;
-    g_isBreakTimerPaused = false;
-    g_isBreakTimerEditing = false;
-    g_breakTimerInputStr.clear();
+    if (!g_app.breakTimer.active) return;
+    g_app.breakTimer.active = false;
+    g_app.breakTimer.paused = false;
+    g_app.breakTimer.editing = false;
+    g_app.breakTimer.inputStr.clear();
     if (g_hwndOverlay) {
         KillTimer(g_hwndOverlay, 2);
     }
@@ -208,7 +170,7 @@ void StopBreakTimer() {
 }
 
 void ToggleBreakTimer(int minutes) {
-    if (g_isBreakTimerActive) {
+    if (g_app.breakTimer.active) {
         StopBreakTimer();
         ShowNotification(L"Break Timer", L"Dismissed", RGB(220, 70, 70));
     }
@@ -218,12 +180,12 @@ void ToggleBreakTimer(int minutes) {
 }
 
 void CommitBreakTimerInput() {
-    if (!g_isBreakTimerEditing) return;
+    if (!g_app.breakTimer.editing) return;
     int newSec = 0;
-    if (ParseTimerString(g_breakTimerInputStr, newSec)) {
+    if (ParseTimerString(g_app.breakTimer.inputStr, newSec)) {
         if (newSec > 5999) newSec = 5999;
-        g_breakTimerRemainingSec = newSec;
-        g_breakTimerTotalSec = newSec;
+        g_app.breakTimer.remainingSec = newSec;
+        g_app.breakTimer.totalSec = newSec;
 
         int m = newSec / 60;
         int s = newSec % 60;
@@ -231,9 +193,9 @@ void CommitBreakTimerInput() {
         swprintf_s(buf, L"Set to %02d:%02d", m, s);
         ShowNotification(L"Timer Updated", buf, RGB(0, 150, 255));
     }
-    g_isBreakTimerEditing = false;
-    g_isBreakTimerPaused = false;
-    g_breakTimerInputStr.clear();
+    g_app.breakTimer.editing = false;
+    g_app.breakTimer.paused = false;
+    g_app.breakTimer.inputStr.clear();
     RedrawOverlay();
 }
 
@@ -275,7 +237,7 @@ static void DrawBreakTimerUI(Graphics& g, int w, int h) {
 
     float totalW = 340.0f;
     float barH = 6.0f;
-    float progress = (g_breakTimerTotalSec > 0) ? (static_cast<float>(g_breakTimerRemainingSec) / static_cast<float>(g_breakTimerTotalSec)) : 0.0f;
+    float progress = (g_app.breakTimer.totalSec > 0) ? (static_cast<float>(g_app.breakTimer.remainingSec) / static_cast<float>(g_app.breakTimer.totalSec)) : 0.0f;
     if (progress < 0.0f) progress = 0.0f;
     if (progress > 1.0f) progress = 1.0f;
 
@@ -285,20 +247,20 @@ static void DrawBreakTimerUI(Graphics& g, int w, int h) {
     SolidBrush trackBg(Color(255, 45, 45, 52));
     g.FillRectangle(&trackBg, barX, barY, totalW, barH);
 
-    Color accentCol = (g_breakTimerRemainingSec <= 30 && !g_isBreakTimerEditing) ? Color(255, 235, 60, 60) : Color(255, 0, 140, 255);
+    Color accentCol = (g_app.breakTimer.remainingSec <= 30 && !g_app.breakTimer.editing) ? Color(255, 235, 60, 60) : Color(255, 0, 140, 255);
     SolidBrush fillBrush(accentCol);
     g.FillRectangle(&fillBrush, barX, barY, totalW * progress, barH);
 
     RectF clockRect(cx - 300.0f, cy - 90.0f, 600.0f, 130.0f);
 
-    if (g_isBreakTimerEditing) {
+    if (g_app.breakTimer.editing) {
         // Interactive edit box frame
         Pen editBorder(Color(255, 0, 160, 255), 2.0f);
         SolidBrush editBg(Color(120, 20, 30, 45));
         g.FillRectangle(&editBg, cx - 220.0f, cy - 85.0f, 440.0f, 125.0f);
         g.DrawRectangle(&editBorder, cx - 220.0f, cy - 85.0f, 440.0f, 125.0f);
 
-        std::wstring disp = g_breakTimerInputStr.empty() ? L"__ : __" : (g_breakTimerInputStr + L"|");
+        std::wstring disp = g_app.breakTimer.inputStr.empty() ? L"__ : __" : (g_app.breakTimer.inputStr + L"|");
         SolidBrush textEdit(Color(255, 255, 255, 255));
         g.DrawString(disp.c_str(), -1, &fontClock, clockRect, &fmtCenter, &textEdit);
 
@@ -311,16 +273,16 @@ static void DrawBreakTimerUI(Graphics& g, int w, int h) {
         g.DrawString(L"Enter: confirm  *  Esc: cancel  *  Format: 3:50 or 5", -1, &fontHint, hintRect, &fmtCenter, &textHint);
     }
     else {
-        int mins = g_breakTimerRemainingSec / 60;
-        int secs = g_breakTimerRemainingSec % 60;
+        int mins = g_app.breakTimer.remainingSec / 60;
+        int secs = g_app.breakTimer.remainingSec % 60;
         wchar_t timeBuf[32];
         swprintf_s(timeBuf, L"%02d:%02d", mins, secs);
 
-        SolidBrush textWhite(g_breakTimerRemainingSec <= 30 ? Color(255, 255, 100, 100) : Color(255, 245, 245, 250));
+        SolidBrush textWhite(g_app.breakTimer.remainingSec <= 30 ? Color(255, 255, 100, 100) : Color(255, 245, 245, 250));
         g.DrawString(timeBuf, -1, &fontClock, clockRect, &fmtCenter, &textWhite);
 
         SolidBrush textAccent(accentCol);
-        std::wstring titleStr = g_isBreakTimerPaused ? L"BREAK TIMER  *  [PAUSED]" : L"BREAK IN PROGRESS";
+        std::wstring titleStr = g_app.breakTimer.paused ? L"BREAK TIMER  *  [PAUSED]" : L"BREAK IN PROGRESS";
         RectF titleRect(cx - 300.0f, cy - 125.0f, 600.0f, 30.0f);
         g.DrawString(titleStr.c_str(), -1, &fontSub, titleRect, &fmtCenter, &textAccent);
 
@@ -436,7 +398,7 @@ void PresentOverlayFrame() {
         g.SetSmoothingMode(SmoothingModeAntiAlias);
         g.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
 
-        if (g_spotlightMode) {
+        if (g_app.spotlightMode) {
             GraphicsPath spotPath;
             spotPath.AddRectangle(Rect(0, 0, g_backWidth, g_backHeight));
             float r = 180.0f;
@@ -448,37 +410,37 @@ void PresentOverlayFrame() {
             g.FillPath(&dimBrush, &spotPath);
         }
 
-        if (g_isBreakTimerActive) {
+        if (g_app.breakTimer.active) {
             DrawBreakTimerUI(g, g_backWidth, g_backHeight);
         }
         else {
             int vScreenX = GetSystemMetrics(SM_XVIRTUALSCREEN);
             int vScreenY = GetSystemMetrics(SM_YVIRTUALSCREEN);
 
-            if (g_boardMode == BoardMode::White) {
+            if (g_app.boardMode == BoardMode::White) {
                 SolidBrush boardBrush(Color(255, 255, 255, 255));
                 g.FillRectangle(&boardBrush, 0, 0, g_backWidth, g_backHeight);
             }
-            else if (g_boardMode == BoardMode::Dark) {
+            else if (g_app.boardMode == BoardMode::Dark) {
                 SolidBrush boardBrush(Color(255, 24, 24, 27));
                 g.FillRectangle(&boardBrush, 0, 0, g_backWidth, g_backHeight);
             }
 
-            for (const auto& s : g_strokes) DrawStroke(g, s, vScreenX, vScreenY);
-            if (!g_currentStroke.points.empty()) DrawStroke(g, g_currentStroke, vScreenX, vScreenY);
-            if (g_isTextInputActive && !g_textDraft.points.empty()) {
-                Stroke caretDraft = g_textDraft;
-                caretDraft.text = g_textDraft.text + (((GetTickCount64() / 500) % 2) ? L" " : L"|");
+            for (const auto& s : g_app.strokes) DrawStroke(g, s, vScreenX, vScreenY);
+            if (!g_app.currentStroke.points.empty()) DrawStroke(g, g_app.currentStroke, vScreenX, vScreenY);
+            if (g_app.textInputActive && !g_app.textDraft.points.empty()) {
+                Stroke caretDraft = g_app.textDraft;
+                caretDraft.text = g_app.textDraft.text + (((GetTickCount64() / 500) % 2) ? L" " : L"|");
                 DrawStroke(g, caretDraft, vScreenX, vScreenY);
             }
 
-            if (g_cropMode) {
+            if (g_app.cropMode) {
                 SolidBrush dimCrop(Color(140, 0, 0, 0));
-                if (g_cropDragging) {
-                    int l = std::min(g_cropStart.x, g_cropEnd.x) - vScreenX;
-                    int t = std::min(g_cropStart.y, g_cropEnd.y) - vScreenY;
-                    int r = std::max(g_cropStart.x, g_cropEnd.x) - vScreenX;
-                    int b = std::max(g_cropStart.y, g_cropEnd.y) - vScreenY;
+                if (g_app.cropDragging) {
+                    int l = std::min(g_app.cropStart.x, g_app.cropEnd.x) - vScreenX;
+                    int t = std::min(g_app.cropStart.y, g_app.cropEnd.y) - vScreenY;
+                    int r = std::max(g_app.cropStart.x, g_app.cropEnd.x) - vScreenX;
+                    int b = std::max(g_app.cropStart.y, g_app.cropEnd.y) - vScreenY;
                     g.FillRectangle(&dimCrop, 0, 0, g_backWidth, t);
                     g.FillRectangle(&dimCrop, 0, b, g_backWidth, g_backHeight - b);
                     g.FillRectangle(&dimCrop, 0, t, l, b - t);
@@ -493,7 +455,7 @@ void PresentOverlayFrame() {
             }
         }
 
-        if (g_keycastText) {
+        if (g_app.keycastText) {
             const float capPadX = 7.0f;
             const float capPadY = 4.0f;
             const float capRadius = 8.0f;
@@ -510,7 +472,7 @@ void PresentOverlayFrame() {
             StringFormat fmtMeasure;
             fmtMeasure.SetFormatFlags(StringFormatFlagsNoWrap);
 
-            const std::vector<std::wstring> parts = SplitKeycastCombo(g_keycastTextValue);
+            const std::vector<std::wstring> parts = SplitKeycastCombo(g_app.keycastTextValue);
 
             std::vector<float> capWidths(parts.size(), 0.0f);
             float capHeight = 0.0f;
@@ -592,13 +554,13 @@ void PresentOverlayFrame() {
 }
 
 bool UndoLastStroke() {
-    if (!g_strokes.empty()) {
-        if (g_strokes.back().type == StrokeType::Badge && g_stepCounter > 1) {
-            g_stepCounter--;
+    if (!g_app.strokes.empty()) {
+        if (g_app.strokes.back().type == StrokeType::Badge && g_app.stepCounter > 1) {
+            g_app.stepCounter--;
         }
-        g_strokes.pop_back();
-        if (g_strokes.empty()) {
-            g_persistentDrawingsActive = false;
+        g_app.strokes.pop_back();
+        if (g_app.strokes.empty()) {
+            g_app.persistentDrawingsActive = false;
         }
         RedrawOverlay();
         return true;
@@ -614,13 +576,13 @@ void RedrawOverlay() {
 void PruneVanishingStrokes() {
     ULONGLONG now = GetTickCount64();
     bool changed = false;
-    for (size_t i = g_strokes.size(); i > 0; ) {
+    for (size_t i = g_app.strokes.size(); i > 0; ) {
         --i;
-        Stroke& s = g_strokes[i];
+        Stroke& s = g_app.strokes[i];
         if (s.birthTick == 0) continue;
         float age = static_cast<float>(now - s.birthTick);
         if (age >= 1200.0f) {
-            g_strokes.erase(g_strokes.begin() + i);
+            g_app.strokes.erase(g_app.strokes.begin() + i);
             changed = true;
         }
         else if (age >= 600.0f) {
@@ -633,8 +595,8 @@ void PruneVanishingStrokes() {
         }
     }
     if (changed) {
-        if (g_strokes.empty()) {
-            g_persistentDrawingsActive = false;
+        if (g_app.strokes.empty()) {
+            g_app.persistentDrawingsActive = false;
         }
         s_framePending = true;
     }
@@ -644,7 +606,7 @@ void ProcessOverlayFrame() {
     PruneVanishingStrokes();
 
     bool bakedBlur = false;
-    for (auto& s : g_strokes) {
+    for (auto& s : g_app.strokes) {
         if (s.type != StrokeType::Blur || s.cachedBitmap) continue;
         if ((s.cachedRect.right - s.cachedRect.left) < 8 || (s.cachedRect.bottom - s.cachedRect.top) < 8) continue;
         if (!bakedBlur && g_hwndOverlay) {
@@ -672,45 +634,45 @@ void ProcessOverlayFrame() {
     static bool s_prevSpotlight = false;
     static bool s_prevKeycast = false;
     static std::wstring s_prevKeycastValue;
-    if (g_spotlightMode != s_prevSpotlight) {
-        s_prevSpotlight = g_spotlightMode;
+    if (g_app.spotlightMode != s_prevSpotlight) {
+        s_prevSpotlight = g_app.spotlightMode;
         s_framePending = true;
     }
-    if (g_keycastText != s_prevKeycast || g_keycastTextValue != s_prevKeycastValue) {
-        if (g_keycastText && !s_prevKeycast) s_keycastShownTick = nowTick;
-        s_prevKeycast = g_keycastText;
-        s_prevKeycastValue = g_keycastTextValue;
-        s_framePending = true;
-    }
-
-    if (g_spotlightMode && mouseMoved) {
+    if (g_app.keycastText != s_prevKeycast || g_app.keycastTextValue != s_prevKeycastValue) {
+        if (g_app.keycastText && !s_prevKeycast) s_keycastShownTick = nowTick;
+        s_prevKeycast = g_app.keycastText;
+        s_prevKeycastValue = g_app.keycastTextValue;
         s_framePending = true;
     }
 
-    bool isDrawingStroke = g_isDrawingLine || g_isDrawingArrow || g_isDrawRectangle ||
-                           g_isDrawingHighlight || g_isDrawingBlur || !g_currentStroke.points.empty();
+    if (g_app.spotlightMode && mouseMoved) {
+        s_framePending = true;
+    }
+
+    bool isDrawingStroke = g_app.isDrawingLine || g_app.isDrawingArrow || g_app.isDrawRectangle ||
+                           g_app.isDrawingHighlight || g_app.isDrawingBlur || !g_app.currentStroke.points.empty();
     if (isDrawingStroke) {
         s_framePending = true;
     }
 
     static bool s_prevTextInputActive = false;
-    if (g_isTextInputActive != s_prevTextInputActive) {
-        s_prevTextInputActive = g_isTextInputActive;
+    if (g_app.textInputActive != s_prevTextInputActive) {
+        s_prevTextInputActive = g_app.textInputActive;
         if (g_hwndOverlay) {
-            if (g_isTextInputActive) SetTimer(g_hwndOverlay, 4, 500, NULL);
+            if (g_app.textInputActive) SetTimer(g_hwndOverlay, 4, 500, NULL);
             else KillTimer(g_hwndOverlay, 4);
         }
         s_framePending = true;
     }
 
-    if (g_keycastText && nowTick > g_keycastUntilTick) {
-        g_keycastText = false;
+    if (g_app.keycastText && nowTick > g_app.keycastUntilTick) {
+        g_app.keycastText = false;
         s_framePending = true;
     }
 
-    if (g_keycastText) {
+    if (g_app.keycastText) {
         const ULONGLONG elapsed = (nowTick > s_keycastShownTick) ? (nowTick - s_keycastShownTick) : 0;
-        const ULONGLONG remaining = (g_keycastUntilTick > nowTick) ? (g_keycastUntilTick - nowTick) : 0;
+        const ULONGLONG remaining = (g_app.keycastUntilTick > nowTick) ? (g_app.keycastUntilTick - nowTick) : 0;
         const float ramp = std::min(1.0f, std::min(static_cast<float>(elapsed) / static_cast<float>(KEYCAST_FADE_IN_MS),
                                               static_cast<float>(remaining) / static_cast<float>(KEYCAST_FADE_OUT_MS)));
         if (ramp < 1.0f) s_framePending = true;
@@ -720,9 +682,9 @@ void ProcessOverlayFrame() {
         s_keycastAlpha = 0.0f;
     }
 
-    bool animating = g_keycastText;
+    bool animating = g_app.keycastText;
     if (!animating) {
-        for (const auto& s : g_strokes) {
+        for (const auto& s : g_app.strokes) {
             if (s.birthTick != 0) {
                 animating = true;
                 break;
@@ -742,16 +704,16 @@ void ProcessOverlayFrame() {
 void SyncOverlayVisibility() {
     if (!g_hwndOverlay) return;
 
-    bool shouldBeVisible = g_isBreakTimerActive ||
-                           g_isTriggerHeld ||
-                           g_spotlightMode ||
-                           g_isTextInputActive ||
-                           g_keycastText ||
-                           g_cropMode ||
-                           (g_boardMode != BoardMode::None) ||
-                           g_persistentDrawingsActive ||
-                           !g_strokes.empty() ||
-                           !g_currentStroke.points.empty() ||
+    bool shouldBeVisible = g_app.breakTimer.active ||
+                           g_app.isTriggerHeld ||
+                           g_app.spotlightMode ||
+                           g_app.textInputActive ||
+                           g_app.keycastText ||
+                           g_app.cropMode ||
+                           (g_app.boardMode != BoardMode::None) ||
+                           g_app.persistentDrawingsActive ||
+                           !g_app.strokes.empty() ||
+                           !g_app.currentStroke.points.empty() ||
                            (fabsf(g_currentZoom - 1.0f) > 0.002f) ||
                            (fabsf(g_targetZoom - 1.0f) > 0.002f);
 
@@ -1025,11 +987,11 @@ void DrawStroke(Graphics& g, const Stroke& stroke, int offX, int offY) {
 }
 
 static void FillBoardBackground(Graphics& g, int x, int y, int w, int h) {
-    if (g_boardMode == BoardMode::White) {
+    if (g_app.boardMode == BoardMode::White) {
         SolidBrush boardBrush(Color(255, 255, 255, 255));
         g.FillRectangle(&boardBrush, x, y, w, h);
     }
-    else if (g_boardMode == BoardMode::Dark) {
+    else if (g_app.boardMode == BoardMode::Dark) {
         SolidBrush boardBrush(Color(255, 24, 24, 27));
         g.FillRectangle(&boardBrush, x, y, w, h);
     }
@@ -1055,8 +1017,8 @@ void CopyScreenshotToClipboard() {
         Graphics g(captureDC.get());
         g.SetSmoothingMode(SmoothingModeAntiAlias);
         FillBoardBackground(g, 0, 0, scrW, scrH);
-        for (const auto& s : g_strokes) DrawStroke(g, s, vScreenX, vScreenY);
-        if (!g_currentStroke.points.empty()) DrawStroke(g, g_currentStroke, vScreenX, vScreenY);
+        for (const auto& s : g_app.strokes) DrawStroke(g, s, vScreenX, vScreenY);
+        if (!g_app.currentStroke.points.empty()) DrawStroke(g, g_app.currentStroke, vScreenX, vScreenY);
     }
 
     selected.restore();
@@ -1095,8 +1057,8 @@ void CopyRegionToClipboard(RECT rcScreen) {
         Graphics g(captureDC.get());
         g.SetSmoothingMode(SmoothingModeAntiAlias);
         FillBoardBackground(g, 0, 0, w, h);
-        for (const auto& s : g_strokes) DrawStroke(g, s, left, top);
-        if (!g_currentStroke.points.empty()) DrawStroke(g, g_currentStroke, left, top);
+        for (const auto& s : g_app.strokes) DrawStroke(g, s, left, top);
+        if (!g_app.currentStroke.points.empty()) DrawStroke(g, g_app.currentStroke, left, top);
     }
 
     selected.restore();
@@ -1110,7 +1072,7 @@ void CopyRegionToClipboard(RECT rcScreen) {
 
 void StartCropSelection() {
     if (!g_hwndOverlay) return;
-    g_cropMode = true;
+    g_app.cropMode = true;
     ShowWindow(g_hwndOverlay, SW_SHOWNOACTIVATE);
     SetCursor(LoadCursor(NULL, IDC_CROSS));
     RedrawOverlay();
@@ -1362,11 +1324,11 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             return 0;
         }
         else if (wParam == 2) {
-            if (g_isBreakTimerActive && !g_isBreakTimerPaused && !g_isBreakTimerEditing) {
-                if (g_breakTimerRemainingSec > 0) {
-                    g_breakTimerRemainingSec--;
+            if (g_app.breakTimer.active && !g_app.breakTimer.paused && !g_app.breakTimer.editing) {
+                if (g_app.breakTimer.remainingSec > 0) {
+                    g_app.breakTimer.remainingSec--;
                     RedrawOverlay();
-                    if (g_breakTimerRemainingSec == 0) {
+                    if (g_app.breakTimer.remainingSec == 0) {
                         MessageBeep(MB_ICONASTERISK);
                         ShowNotification(L"Break Ended", L"Time is up!", RGB(46, 204, 113));
                     }

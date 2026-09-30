@@ -1,251 +1,87 @@
 <div align="center">
 
-<!-- 🖼️ App icon goes here -->
+<!-- App icon goes here -->
 <img src="app.ico" width="96" height="96" alt="LensIt icon">
 
 # LensIt
 
-**Small screen magnifier, annotation tool and break timer for Windows.**
+A lightweight screen magnifier and annotation overlay for Windows, inspired by Sysinternals ZoomIt, but with smoother zooming and a few extra presentation tools (laser ink, step badges, blur, timer).
 
-Hold a key and scroll to zoom in on the cursor, draw lines, arrows and rectangles, mark steps, blur out sensitive data, or run a countdown timer over your screen. Useful for presentations, tutorials, streams, lectures and bug reports.
-
-[Features](#-features) • [Usage](#-usage) • [Break Timer](#-break-countdown-timer) • [Settings](#-settings) • [Installation](#-installation) • [Building from source](#-building-from-source) • [Русская версия](#-lensit-русская-версия)
-
-</div>
+Written in pure C++ (Win32 API + GDI+), no third-party dependencies.
 
 ---
 
-## Features
+## What it does
 
-- Single executable, under 1 MB
-- Around 15 MB of RAM
-- 0% CPU when idle
-- No dependencies, runs on a clean Windows 10 or 11 install
+- **Cursor-centered Magnifier:** Uses the Windows Magnification API (`MagSetFullscreenTransform`) for hardware-accelerated zoom without lag.
+- **On-screen Drawing:** Freehand lines, arrows, rectangles, and highlighters.
+- **Step Badges:** Numbered markers (1, 2, 3...) to guide walkthroughs or tutorials.
+- **Privacy Blur:** Quickly redact tokens, passwords, or credentials on screen.
+- **Break Timer:** A fullscreen overlay with a countdown clock for talks, webinars, or study sessions.
+- **Click-through Pin Mode:** Keeps annotations on screen while letting you interact with underlying windows.
+- **Spotlight & Laser Ink:** Dim everything except the cursor area, or draw strokes that fade out automatically after a second.
 
-- **Instant magnifier** - hold the trigger key and scroll to zoom smoothly on the cursor
-- **Annotation tools** - freehand lines, arrows, rectangles
-- **Step badges** - numbered markers (1, 2, 3...) that auto-increment, handy for walking someone through steps
-- **Highlighter** - translucent marker for text and UI elements
-- **Blackout blur** - cover up passwords, tokens, API keys, anything you don't want on screen
-- **Break countdown timer** - translucent fullscreen timer with mouse-wheel scrubbing and manual time entry
-- **Pin mode** - keep drawings on screen as a click-through overlay instead of clearing them
-- **Quick color palette** - swap ink color on the fly with `R`/`G`/`B`/`Y`
-- **One-key screenshot** - copies the annotated view straight to your clipboard
-- **Toast HUD** - small on-screen notices when you switch modes or colors
-- Fully customizable trigger key, modifier key, colors and stroke widths
-- Lives in the tray, no taskbar clutter
-- Settings are saved automatically to a local `config.ini` next to the exe
+---
 
-## Usage
+## Controls
 
-| Action | Input |
-|---|---|
-| Zoom in / out | Hold **Trigger Key** (default `Alt`) + Mouse Wheel |
-| Draw a line | Hold **Trigger Key** + Left Mouse Button |
-| Draw an arrow | Hold **Trigger Key** + Right Mouse Button |
-| Snap line/arrow (0°/45°/90°) | Hold **Trigger Key** + `Shift` + drag |
-| Draw a rectangle | Hold **Trigger Key** + **Rectangle Key** (default `Shift`) + Left Mouse Button |
-| Place a step badge (1, 2, 3...) | Hold **Trigger Key** + Middle Mouse Button |
-| Text on screen | Hold **Trigger Key** + `X` (Type text, `Enter` to commit, `Esc` to cancel) |
-| Toggle Highlighter | Hold **Trigger Key** + `H` |
-| Toggle Blackout Blur | Hold **Trigger Key** + `O` |
-| Laser Ink (vanishing strokes) | Hold **Trigger Key** + `V` |
-| Spotlight focus | Hold **Trigger Key** + `S` |
-| Whiteboard / Blackboard | Hold **Trigger Key** + `W` (cycles White / Dark / Off) |
-| Keystroke HUD | Hold **Trigger Key** + `K` |
-| **Toggle Break Timer** | Hold **Trigger Key** + `T` |
-| Quick Color switch | Hold **Trigger Key** + `R` (Red) / `G` (Green) / `B` (Blue) / `Y` (Yellow) |
-| Undo last stroke | Hold **Trigger Key** + `Z` |
-| Fullscreen Screenshot | Hold **Trigger Key** + `C` |
-| Crop area Screenshot | Hold **Trigger Key** + `Shift` + `C` |
-| Pin drawings (keep on screen) | Hold **Trigger Key** + `P` |
-| Reset zoom & clear drawings | `Esc` |
-| Open settings / Exit | Right-click the tray icon |
+The default trigger key is **Alt**. Hold it down to access shortcuts:
 
-> **Note:** By default, releasing the trigger key clears unpinned drawings. You can toggle "Keep drawings on screen" or turn on "Reset zoom on release" in settings if you want different behavior.
+| Action | Hotkey |
+| --- | --- |
+| **Zoom in / out** | `Alt` + Mouse Wheel |
+| **Draw Line** | `Alt` + Left Click + Drag |
+| **Draw Arrow** | `Alt` + Right Click + Drag |
+| **Snap angle (0° / 45° / 90°)** | `Alt` + `Shift` + Drag |
+| **Draw Rectangle** | `Alt` + `Shift` + Left Click |
+| **Drop Step Badge (1, 2...)** | `Alt` + Middle Click |
+| **Text on screen** | `Alt` + `X` (`Enter` to finish, `Esc` to cancel) |
+| **Toggle Highlighter** | `Alt` + `H` |
+| **Toggle Blur Redaction** | `Alt` + `O` |
+| **Laser Ink (auto-fade)** | `Alt` + `V` |
+| **Spotlight mode** | `Alt` + `S` |
+| **Whiteboard / Blackboard** | `Alt` + `W` (cycles White -> Dark -> Off) |
+| **Keystroke HUD** | `Alt` + `K` |
+| **Break Timer** | `Alt` + `T` |
+| **Color Switch** | `Alt` + `R` (Red) / `G` (Green) / `B` (Blue) / `Y` (Yellow) |
+| **Undo last stroke** | `Alt` + `Z` |
+| **Full Screenshot** | `Alt` + `C` |
+| **Crop Screenshot** | `Alt` + `Shift` + `C` |
+| **Pin drawings** | `Alt` + `P` (prevents clearing on release) |
+| **Reset / Exit active tool** | `Esc` |
 
-> **Note for gamers:** LensIt overlays the screen and hooks into system-wide magnification, so it won't work over apps running in true exclusive fullscreen (Geometry Dash, Counter-Strike 2, and a lot of other games behave this way). Switch the game to Borderless / Windowed Borderless, or plain Windowed, in its video settings to use LensIt.
+*The trigger key and rectangle modifier can be rebound in Settings (right-click the tray icon).*
 
-## Break Countdown Timer
+### Break Timer Controls
+- **Scroll Wheel** or `↑` / `↓` adjusts time by ±1 minute.
+- **Shift + Scroll** or `Shift + ↑` / `↓` adjusts by ±5 seconds.
+- **Click the clock** to type time directly (`3:50`, `10`, etc.).
+- **Space** toggles pause, **Esc** dismisses the timer.
 
-Need a 5-minute break, or want to give people time for an exercise during a webinar, lecture or stream? Press **`[Trigger] + T`** and you get a translucent backdrop with a countdown clock and progress bar.
+---
 
-- **Adjust by minutes:** scroll the wheel (or `↑` / `↓`)
-- **Adjust by seconds:** hold `Shift` while scrolling (or `Shift + ↑` / `Shift + ↓`) for ±5 second steps
-- **Type an exact time:** click the clock, type something like `3:50`, `10` or `:45`, hit `Enter`
-- **Pause / resume:** `Space`
-- **Dismiss:** `Esc` (or `[Trigger] + T` again)
-- When it hits zero you get a quiet chime and a toast notification
+## Limitations
 
-## Settings
+- **Exclusive Fullscreen:** LensIt uses a layered desktop window (`UpdateLayeredWindow`) combined with the Windows Magnification engine. It will not render over games running in true exclusive fullscreen. If you need it over a game, switch the game to **Borderless Windowed**.
 
-Right-click the tray icon and open **Settings** to configure:
+---
 
-- **Trigger Key** - which key or mouse button (including X1/X2/Middle) activates zoom and drawing
-- **Reset zoom on trigger release** - snap back to 1x when you let go
-- **Keep drawings on screen** - make drawings persist and stay click-through after release
-- **Line / Arrow / Rectangle** - color and width for each tool separately
-- **Rectangle Modifier Key** - the extra key held with the trigger to draw rectangles
-- **Step Badge Color**
-- A shortcuts drawer with the full hotkey list, in case you forget one
+## Building
 
-Everything saves automatically to `config.ini`.
+Requires Visual Studio 2022+ with the **Desktop development with C++** workload.
 
-## Installation
-
-1. Go to the [Releases](../../releases) page
-2. Grab the latest `LensIt.exe`
-3. Run it. No installer, no setup wizard.
-
-On first launch you'll get a small welcome dialog offering to enable startup with Windows and create a desktop shortcut, both optional. To remove it, just delete the `.exe` and, if one was created, `config.ini`.
-
-## Building from source
-
-**Requirements:**
-- Windows 10 / 11
-- Visual Studio 2022 (or newer) with the **"Desktop development with C++"** workload
-
-**Build steps:**
-1. Clone the repository:
+1. Clone the repo:
    ```bash
    git clone https://github.com/akywaa/LensIt.git
    cd LensIt
    ```
-2. Open `LensIt.vcxproj` (or open the folder) in Visual Studio.
-3. Select the **Release** configuration and **x64** (or **Win32**) platform.
-4. Press `Ctrl + Shift + B` (or menu **Build -> Build Solution**).
+2. Open `LensIt.vcxproj` in Visual Studio.
+3. Select **Release / x64** and build (`Ctrl + Shift + B`).
 
-The compiled binary will be located in the `x64/Release/` directory. All required libraries (`magnification.lib`, `gdiplus.lib`, etc.) are part of the standard Windows SDK - no extra dependencies needed.
-
-## Tech stack
-
-- C++ with the native Win32 API
-- Windows Magnification API for hardware-accelerated zoom
-- GDI+ for the annotations, blur baking, timer HUD and dark UI
-- Low-level keyboard/mouse hooks for global input capture
-
----
----
-
-<div align="center">
-
-# LensIt - русская версия
-
-**Компактная лупа для экрана с инструментами аннотаций и таймером перерыва для Windows.**
-
-Зажимаешь клавишу, крутишь колесо мыши - приближаешь нужную область. Можно рисовать линии, стрелки, прямоугольники, ставить номера шагов, размывать конфиденциальные данные или запускать таймер перерыва прямо поверх экрана. Пригодится для презентаций, лекций, стримов и обучающих видео.
-
-[Возможности](#-возможности) • [Использование](#-использование) • [Таймер перерыва](#-таймер-перерыва-break-timer) • [Настройки](#-настройки) • [Установка](#-установка) • [Сборка из исходников](#-сборка-из-исходников)
-
-</div>
+All linked libraries (`magnification.lib`, `gdiplus.lib`, `dwmapi.lib`) are included in the default Windows SDK.
 
 ---
 
-## Возможности
+## License
 
-- Один exe-файл, меньше 1 МБ
-- Около 15 МБ ОЗУ
-- 0% процессора в простое
-- Никаких зависимостей, работает на чистой Windows 10 и 11
-
-- **Мгновенная лупа** - зажми клавишу-триггер и крути колесо, чтобы плавно приблизить область вокруг курсора
-- **Аннотации** - линии, стрелки, прямоугольники от руки
-- **Бейджи шагов** - нумерованные маркеры (1, 2, 3...) с автоинкрементом, удобно, когда нужно провести кого-то по шагам
-- **Маркер (Highlighter)** - полупрозрачное выделение текста и элементов интерфейса
-- **Размытие (Blur)** - скрыть пароли, токены, ключи и всё, что не должно светиться на экране
-- **Таймер перерыва** - полупрозрачный полноэкранный таймер с настройкой колесом мыши и вводом времени вручную
-- **Pin Mode** - рисунки остаются на экране как сквозной для кликов слой, вместо того чтобы сразу пропадать
-- **Быстрая смена цвета** - `R`/`G`/`B`/`Y` прямо на лету
-- **Скриншот в один клик** - аннотированный вид сразу в буфер обмена
-- **Toast-уведомления** - небольшие подсказки при переключении режимов и цветов
-- Полностью настраиваемые клавиша-триггер, модификатор, цвета и толщина линий
-- Живёт в трее, не занимает панель задач
-- Настройки сохраняются автоматически в `config.ini` рядом с exe
-
-## Использование
-
-| Действие | Управление |
-|---|---|
-| Приблизить / отдалить | Зажать **клавишу-триггер** (по умолчанию `Alt`) + колесо мыши |
-| Нарисовать линию | Зажать **клавишу-триггер** + ЛКМ |
-| Нарисовать стрелку | Зажать **клавишу-триггер** + ПКМ |
-| Выравнивание линий (0°/45°/90°) | Зажать **клавишу-триггер** + `Shift` + тянуть линию/стрелку |
-| Нарисовать прямоугольник | Зажать **клавишу-триггер** + **клавишу для прямоуг.** (`Shift`) + ЛКМ |
-| Поставить бейдж шага (1, 2, 3...) | Зажать **клавишу-триггер** + СКМ |
-| Текст на экране | Зажать **клавишу-триггер** + `X` (ввод текста, `Enter` — применить, `Esc` — отмена) |
-| Включить/выключить маркер | Зажать **клавишу-триггер** + `H` |
-| Включить/выключить размытие | Зажать **клавишу-триггер** + `O` |
-| Лазерные чернила (исчезающие) | Зажать **клавишу-триггер** + `V` |
-| Режим прожектора (Spotlight) | Зажать **клавишу-триггер** + `S` |
-| Доска для рисования | Зажать **клавишу-триггер** + `W` (Белая / Тёмная / Выкл) |
-| Отображение нажатых клавиш (HUD) | Зажать **клавишу-триггер** + `K` |
-| **Включить/выключить таймер** | Зажать **клавишу-триггер** + `T` |
-| Быстрая смена цвета | Зажать **клавишу-триггер** + `R`/`G`/`B`/`Y` |
-| Отменить последнее действие | Зажать **клавишу-триггер** + `Z` |
-| Скриншот всего экрана | Зажать **клавишу-триггер** + `C` |
-| Скриншот области (Crop) | Зажать **клавишу-триггер** + `Shift` + `C` |
-| Закрепить рисунки на экране | Зажать **клавишу-триггер** + `P` |
-| Сбросить приближение и рисунки | `Esc` |
-| Открыть настройки / выйти | ПКМ по иконке в трее |
-
-> **Примечание:** по умолчанию при отпускании клавиши-триггера незакреплённые рисунки исчезают. Это можно поменять через "Keep drawings on screen" или включить "Reset zoom on release" в настройках.
-
-> **Примечание для геймеров:** LensIt накладывается поверх экрана и цепляется к системному масштабированию, поэтому не работает поверх игр в настоящем exclusive fullscreen режиме (Geometry Dash, Counter-Strike 2 и многие другие так себя ведут). Чтобы LensIt заработал, переключи игру на Borderless / Windowed Borderless или обычный оконный режим в настройках графики.
-
-## Таймер перерыва (Break Timer)
-
-Нужен 5-минутный перерыв или время на задание во время созвона, вебинара или стрима? Нажми **`[Триггер] + T`** - экран затемнится, появится крупный таймер с прогресс-баром.
-
-- **По минутам:** колесо мыши (или `↑` / `↓`)
-- **По секундам:** `Shift` + колесо (или `Shift + ↑` / `Shift + ↓`), шаг ±5 секунд
-- **Ввести точное время:** кликни по цифрам, введи что-то вроде `3:50`, `10` или `:45`, нажми `Enter`
-- **Пауза/продолжить:** `Пробел`
-- **Закрыть:** `Esc` (или снова `[Триггер] + T`)
-- По окончании - тихий системный сигнал и toast-уведомление
-
-## Настройки
-
-ПКМ по иконке в трее → **Settings**, там можно настроить:
-
-- **Trigger Key** - клавишу или кнопку мыши (включая X1/X2/среднюю), которая активирует режим
-- **Reset zoom on trigger release** - сброс приближения при отпускании
-- **Keep drawings on screen** - рисунки остаются на экране и сквозными для кликов после отпускания
-- **Line / Arrow / Rectangle** - цвет и толщина отдельно для каждого инструмента
-- **Rectangle Modifier Key** - дополнительная клавиша для прямоугольников
-- **Step Badge Color**
-- Шпаргалка по горячим клавишам прямо в настройках, если что-то забудешь
-
-Все изменения сохраняются в `config.ini` автоматически.
-
-## Установка
-
-1. Открой страницу [Releases](../../releases)
-2. Скачай последний `LensIt.exe`
-3. Запусти. Установщика нет.
-
-При первом запуске появится окошко с предложением включить автозапуск и создать ярлык на рабочем столе - оба пункта опциональны. Чтобы удалить программу, просто сотри `.exe`, а заодно и `config.ini`, если он успел создаться.
-
-## Сборка из исходников
-
-**Требования:**
-- Windows 10 / 11
-- Visual Studio 2022 (или новее) с компонентом **«Разработка классических приложений на C++»**
-
-**Инструкция по сборке:**
-1. Склонируй репозиторий:
-   ```bash
-   git clone https://github.com/akywaa/LensIt.git
-   cd LensIt
-   ```
-2. Открой `LensIt.vcxproj` (или папку с проектом) в Visual Studio.
-3. Выбери конфигурацию **Release** и платформу **x64** (или **Win32**).
-4. Нажми `Ctrl + Shift + B` (или пункт меню **Сборка -> Собрать решение**).
-
-Готовый исполняемый файл появится в папке `x64/Release/`. Все библиотеки (`magnification.lib`, `gdiplus.lib` и др.) входят в стандартный Windows SDK - ничего дополнительно ставить не нужно.
-
-## Технологии
-
-- C++ на нативном Win32 API
-- Windows Magnification API для аппаратного масштабирования
-- GDI+ для аннотаций, размытия, графики таймера и интерфейса
-- Низкоуровневые хуки клавиатуры и мыши для глобального перехвата ввода
+MIT
